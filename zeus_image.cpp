@@ -32,7 +32,7 @@ LoadBMP(platform_state *PlatformState,
 		const char *FileName)
 {
 	// NOTE(ivan): Remember, that this is NOT a complete BMP loading code,
-	// it supports only 32-bit XRGB bitmaps with no compression and negative height!
+	// it supports only 32-bit XRGB bitmaps with no compression and no negative height!
 	
 	Assert(PlatformState);
 	Assert(PlatformAPI);
@@ -78,12 +78,22 @@ LoadBMP(platform_state *PlatformState,
 				
 			Result.Pixels = PlatformAPI->AllocateMemory(Header->Width * Header->Height * Header->BitsPerPixel / 8);
 			if (Result.Pixels) {
-				memcpy(Result.Pixels, Pixels, Header->Width * Header->Height * Header->BitsPerPixel / 8);
-					
 				Result.Width = Header->Width;
 				Result.Height = Header->Height;
 				Result.BytesPerPixel = Header->BitsPerPixel / 8;
 				Result.Pitch = Header->Width * Header->BitsPerPixel / 8;
+				
+				u8 *SourceRow =(u8 *)Pixels + Result.Pitch * (Header->Height - 1);
+				u8 *DestRow = (u8 *)Result.Pixels;
+				for (s32 Y = 0; Y < Header->Height; Y++) {
+					u32 *SourcePixel = (u32 *)SourceRow;
+					u32 *DestPixel = (u32 *)DestRow;
+					for (s32 X = 0; X < Header->Width; X++)
+						*DestPixel++ = *SourcePixel++;
+
+					SourceRow -= Result.Pitch;
+					DestRow += Result.Pitch;
+				}
 			} else {
 				PlatformAPI->Log(PlatformState, "BMP file '%s' is too large.", FileName);
 			}

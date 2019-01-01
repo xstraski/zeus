@@ -91,11 +91,7 @@ DrawImage(game_surface_buffer *Buffer,
 	s32 PosY1 = PosY0 + Image->Height;
 
 	u8 *DestRow = ((u8 *)Buffer->Pixels + (PosY0 * Buffer->Pitch));
-#if 1	
-	u8 *SourceRow = (u8 *)Image->Pixels + Image->Pitch * (Image->Height - 1);
-#else	
 	u8 *SourceRow = (u8 *)Image->Pixels;
-#endif	
 	for (s32 Y = PosY0; Y < PosY1; Y++) {
 		u32 *DestPixel = (u32 *)(DestRow + (PosX0 * Buffer->BytesPerPixel));
 		u32 *SourcePixel = (u32 *)SourceRow;
@@ -103,27 +99,24 @@ DrawImage(game_surface_buffer *Buffer,
 			u32 SourceC = *SourcePixel;
 			u32 DestC = *DestPixel;
 
+			// TODO(ivan): Premultiplied alpha!!!
 			blending_result BResult = DoLinearBlending(((SourceC >> 24) & 0xFF) / 255.0f,
-													   (u8)((SourceC >> 16) & 0xFF),
-													   (u8)((SourceC >> 8) & 0xFF),
-													   (u8)((SourceC >> 0) & 0xFF),
 													   (u8)((DestC >> 16) & 0xFF),
 													   (u8)((DestC >> 8) & 0xFF),
-													   (u8)((DestC >> 0) & 0xFF));
-			*DestPixel = (u32)((BResult.R << 16) |
-							   (BResult.G << 8) |
-							   (BResult.B << 0));
+													   (u8)((DestC >> 0) & 0xFF),
+													   (u8)((SourceC >> 16) & 0xFF),
+													   (u8)((SourceC >> 8) & 0xFF),
+													   (u8)((SourceC >> 0) & 0xFF));
+			*DestPixel = (((u32)BResult.R << 16) |
+						  ((u32)BResult.G << 8) |
+						  ((u32)BResult.B << 0));
 
 			SourcePixel++;
 			DestPixel++;
 		}
 			
 		DestRow += Buffer->Pitch;
-#if 1		
-		SourceRow -= Image->Pitch;
-#else
 		SourceRow += Image->Pitch;
-#endif		
 	}
 }
 

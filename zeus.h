@@ -120,6 +120,10 @@ struct game_state {
 
 	memory_stack FrameStack;
 
+	u32 XOffset;
+	u32 YOffset;
+	f32 PosX;
+	f32 PosY;
 	image TestImage;
 };
 

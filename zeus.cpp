@@ -182,21 +182,34 @@ UpdateGame(platform_state *PlatformState,
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 
 		State->TestImage = LoadBMP(PlatformState, PlatformAPI, "data\\hhtest.bmp");
+
+		State->XOffset = 0;
+		State->YOffset = 0;
+		
+		State->PosX = 0.5f;
+		State->PosY = 0.5f;
 	} break;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game frame.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Frame: {
+		if (Input->KeyboardButtons[KeyCode_W].IsDown)
+			State->PosY -= 0.001f;
+		if (Input->KeyboardButtons[KeyCode_S].IsDown)
+			State->PosY += 0.001f;
+		if (Input->KeyboardButtons[KeyCode_A].IsDown)
+			State->PosX -= 0.001f;
+		if (Input->KeyboardButtons[KeyCode_D].IsDown)
+			State->PosX += 0.001f;
+		
         DrawSolidColor(SurfaceBuffer, MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 		
-        static s32 XOffset = 0;
-		static s32 YOffset = 0;
-		DrawWeirdGradient(SurfaceBuffer, XOffset, YOffset);
-		XOffset++;
-		YOffset++;
+		DrawWeirdGradient(SurfaceBuffer, State->XOffset, State->YOffset);
+		State->XOffset++;
+		State->YOffset++;
 
-		DrawImage(SurfaceBuffer, MakeV2(0.5f, 0.5f), &State->TestImage);
+		DrawImage(SurfaceBuffer, MakeV2(State->PosX, State->PosY), &State->TestImage);
 
 		// NOTE(ivan): Free per-frame memory arena.
 		FreeMemoryStack(PlatformAPI, &State->FrameStack);

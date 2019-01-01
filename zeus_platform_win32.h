@@ -73,10 +73,6 @@
 #undef YieldProcessor
 #undef BitScanForward
 #undef BitScanReverse
-#undef LoadBitmap
-
-// NOTE(ivan): OpenGL includes.
-#include <GL/gl.h>
 
 // NOTE(ivan): Release macro for COM objects.
 #define ReleaseCOM(Obj) do {if (Obj) Obj->Release(); Obj = 0;} while(0)
