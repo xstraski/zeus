@@ -126,8 +126,6 @@ DrawRectangle(game_surface_buffer *Buffer,
 					  ((u32)BResult.B << 0));
 			Pixel++;
 		}
-
-		Row += Buffer->Pitch;
 	}
 }
 
