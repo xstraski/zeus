@@ -122,6 +122,34 @@ PLATFORM_GET_MEMORY_STATS(Win32GetMemoryStats)
 	return Result;
 }
 
+// NOTE(ivan): System structure for setting thread name by Win32SetThreadName().
+#pragma pack(push, 8)
+struct win32_thread_name_info {
+	DWORD Type; // NOTE(ivan): Must be 0x1000.
+	LPCSTR Name;
+	DWORD ThreadId;
+	DWORD Flags;
+};
+#pragma pack(pop)
+
+inline void
+Win32SetThreadName(DWORD ThreadId, const char *Name)
+{
+	Assert(Name);
+	
+	win32_thread_name_info NameInfo = {};
+	NameInfo.Type = 0x1000;
+	NameInfo.Name = Name;
+	NameInfo.ThreadId = ThreadId;
+
+#pragma warning(push)
+#pragma warning(disable: 6320 6322)
+	__try {
+		RaiseException(0x406D1388, 0, sizeof(NameInfo) / sizeof(ULONG_PTR), (ULONG_PTR *)&NameInfo);
+	} __except(EXCEPTION_EXECUTE_HANDLER) {}
+#pragma warning(pop)
+}
+
 inline DWORD
 Win32GetThreadId(void)
 {
@@ -825,13 +853,16 @@ WinMain(HINSTANCE Instance,
 	PlatformState.Instance = Instance;
 	PlatformState.ShowCommand = ShowCommand;
 
-	// TODO(ivan): Are theese UTF-8 or ANSI?
+	// TODO(ivan): Are these UTF-8 or ANSI?
 	PlatformState.Params = __argv;
 	PlatformState.NumParams = __argc;
 
 #if INTERNAL
 	PlatformState.DebugCursor = true;
 #endif
+
+	// NOTE(ivan): Set primary thread name.
+	Win32SetThreadName(GetCurrentThreadId(), GAMENAME " primary thread");
 
 	// NOTE(ivan): Check OS version.
 	if (!IsWindows7OrGreater())

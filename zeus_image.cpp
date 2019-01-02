@@ -32,7 +32,7 @@ LoadBMP(platform_state *PlatformState,
 		const char *FileName)
 {
 	// NOTE(ivan): Remember, that this is NOT a complete BMP loading code,
-	// it supports only 32-bit XRGB bitmaps with no compression and no negative height!
+	// it supports only 32-bit ARGB bitmaps with no compression and no negative height!
 	
 	Assert(PlatformState);
 	Assert(PlatformAPI);
@@ -58,7 +58,7 @@ LoadBMP(platform_state *PlatformState,
 			bit_scan_result RedShift = BitScanForward(Header->RedMask);
 			bit_scan_result GreenShift = BitScanForward(Header->GreenMask);
 			bit_scan_result BlueShift = BitScanForward(Header->BlueMask);
-			bit_scan_result AlphaShift = BitScanForward(Header->RedMask | Header->GreenMask | Header->BlueMask);
+			bit_scan_result AlphaShift = BitScanForward(~(Header->RedMask | Header->GreenMask | Header->BlueMask));
 			
 			Assert(RedShift.IsFound);
 			Assert(GreenShift.IsFound);
@@ -85,10 +85,10 @@ LoadBMP(platform_state *PlatformState,
 				
 				u8 *SourceRow =(u8 *)Pixels + Result.Pitch * (Header->Height - 1);
 				u8 *DestRow = (u8 *)Result.Pixels;
-				for (s32 Y = 0; Y < Header->Height; Y++) {
+				for (s32 Y = 0; Y < Result.Height; Y++) {
 					u32 *SourcePixel = (u32 *)SourceRow;
 					u32 *DestPixel = (u32 *)DestRow;
-					for (s32 X = 0; X < Header->Width; X++)
+					for (s32 X = 0; X < Result.Width; X++)
 						*DestPixel++ = *SourcePixel++;
 
 					SourceRow -= Result.Pitch;
