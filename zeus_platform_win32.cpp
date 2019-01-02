@@ -995,7 +995,7 @@ WinMain(HINSTANCE Instance,
 	if (!State)
 		Win32Error(&PlatformState, "Failed allocating game state!");
 	memset(State, 0, sizeof(game_state)); // NOTE(ivan): Game state MUST be zeroed.
-	State->Type = GameStateType_Init;
+	State->Type = GameStateType_Prepare;
 
 	// NOTE(ivan): Show main window after all initialization is done.
 	ShowWindow(PlatformState.MainWindow, PlatformState.ShowCommand);
@@ -1184,7 +1184,7 @@ WinMain(HINSTANCE Instance,
 	}
 
 	// NOTE(ivan): Game uninitialization.
-	State->Type = GameStateType_Shutdown;
+	State->Type = GameStateType_Release;
 	UpdateGame(&PlatformState,
 			   &PlatformAPI,
 			   0,

@@ -107,9 +107,9 @@ struct game_config {
 
 // NOTE(ivan): Game state type.
 enum game_state_type {
-    GameStateType_Init,
-	GameStateType_Frame,
-	GameStateType_Shutdown
+    GameStateType_Prepare,
+	GameStateType_Release,
+	GameStateType_Frame
 };
 
 // NOTE(ivan): Game state.
@@ -120,10 +120,8 @@ struct game_state {
 
 	memory_stack FrameStack;
 
-	u32 XOffset;
-	u32 YOffset;
-	f32 PosX;
-	f32 PosY;
+	f32 PlayerPosX;
+	f32 PlayerPosY;
 	image TestImage;
 };
 

@@ -21,8 +21,4 @@ void DrawImage(game_surface_buffer *Buffer,
 void DrawSolidColor(game_surface_buffer *Buffer,
 					rgba Color);
 
-void DrawWeirdGradient(game_surface_buffer *Buffer,
-					   u32 XOffset,
-					   u32 YOffset);
-
 #endif // #ifndef ZEUS_DRAW_H

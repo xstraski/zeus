@@ -170,7 +170,7 @@ UpdateGame(platform_state *PlatformState,
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game initialization.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
-	case GameStateType_Init: {
+	case GameStateType_Prepare: {
 		InitializeMemoryStack(PlatformState,
 							  PlatformAPI,
 							  &State->FrameStack,
@@ -183,33 +183,36 @@ UpdateGame(platform_state *PlatformState,
 
 		State->TestImage = LoadBMP(PlatformState, PlatformAPI, "data\\hhtest.bmp");
 
-		State->XOffset = 0;
-		State->YOffset = 0;
-		
-		State->PosX = 0.5f;
-		State->PosY = 0.5f;
+		State->PlayerPosX = 100.0f;
+		State->PlayerPosY = 100.0f;
 	} break;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game frame.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Frame: {
+		static const f32 PlayerSpeed = 60.0f;
+		f32 MovePlayerX = 0.0f;
+		f32 MovePlayerY = 0.0f;
 		if (Input->KeyboardButtons[KeyCode_W].IsDown)
-			State->PosY -= 0.001f;
+			MovePlayerY -= PlayerSpeed * (f32)Clocks->SecondsPerFrame;
 		if (Input->KeyboardButtons[KeyCode_S].IsDown)
-			State->PosY += 0.001f;
+			MovePlayerY += PlayerSpeed * (f32)Clocks->SecondsPerFrame;
 		if (Input->KeyboardButtons[KeyCode_A].IsDown)
-			State->PosX -= 0.001f;
+			MovePlayerX -= PlayerSpeed * (f32)Clocks->SecondsPerFrame;
 		if (Input->KeyboardButtons[KeyCode_D].IsDown)
-			State->PosX += 0.001f;
+			MovePlayerX += PlayerSpeed * (f32)Clocks->SecondsPerFrame;
+		if (MovePlayerX && MovePlayerY) {
+			MovePlayerX *= 0.707106781187f;
+			MovePlayerY *= 0.707106781187f;
+		}
+		State->PlayerPosX += MovePlayerX;
+		State->PlayerPosY += MovePlayerY;
 		
         DrawSolidColor(SurfaceBuffer, MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 		
-		DrawWeirdGradient(SurfaceBuffer, State->XOffset, State->YOffset);
-		State->XOffset++;
-		State->YOffset++;
-
-		DrawImage(SurfaceBuffer, MakeV2(State->PosX, State->PosY), &State->TestImage);
+		DrawImage(SurfaceBuffer, MakeV2(State->PlayerPosX, State->PlayerPosY), &State->TestImage);
+		DrawRectangle(SurfaceBuffer, MakeV2(60.0f, 60.0f), MakeV2(160.0f, 160.0f), MakeRGBA(1.0f, 0.0f, 0.0f, 0.5f));
 
 		// NOTE(ivan): Free per-frame memory arena.
 		FreeMemoryStack(PlatformAPI, &State->FrameStack);
@@ -218,7 +221,7 @@ UpdateGame(platform_state *PlatformState,
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game release.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
-	case GameStateType_Shutdown: {
+	case GameStateType_Release: {
 		FreeImage(PlatformAPI, &State->TestImage);
 		
 		// NOTE(ivan): Save configuration.
