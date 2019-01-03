@@ -1,5 +1,5 @@
-#ifndef ZEUS_PLATFORM_H
-#define ZEUS_PLATFORM_H
+#ifndef GAME_PLATFORM_H
+#define GAME_PLATFORM_H
 
 // NOTE(ivan): Compiler detection.
 #if defined(_MSC_VER)
@@ -373,4 +373,4 @@ LeaveTicketMutex(ticket_mutex *Mutex)
 	AtomicIncrementU64(&Mutex->Serving);
 }
 
-#endif // #ifndef ZEUS_PLATFORM_H
+#endif // #ifndef GAME_PLATFORM_H

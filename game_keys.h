@@ -1,5 +1,5 @@
-#ifndef ZEUS_KEYS_H
-#define ZEYS_KEYS_H
+#ifndef GAME_KEYS_H
+#define GAME_KEYS_H
 
 // NOTE(ivan): Keyboard key codes.
 enum key_code {
@@ -117,4 +117,4 @@ enum key_code {
 	KeyCode_MaxCount
 };
 
-#endif // #ifndef ZEUS_KEYS_H
+#endif // #ifndef GAME_KEYS_H

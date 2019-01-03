@@ -1,7 +1,7 @@
-#ifndef ZEUS_MISC_H
-#define ZEUS_MISC_H
+#ifndef ZEUS_GAME_H
+#define ZEUS_GAME_H
 
-#include "zeus_platform.h"
+#include "game_platform.h"
 
 // NOTE(ivan): String tokenizer result.
 struct tokenize_string_result {
@@ -20,4 +20,4 @@ u32 GetLine(const char *Source,
 			char *Buffer,
 			u32 BufferSize);
 
-#endif // #ifndef ZEUS_MISC_H
+#endif // #ifndef GAME_MISC_H

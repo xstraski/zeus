@@ -10,7 +10,7 @@ rem General project name, must not contain spaces and deprecated symbols, no ext
 rem In a nutshell, the target game executable will be named as %OutputName%.exe,
 rem the target game entities will be named as %OutputName%_ents.dll,
 rem and the editor's dll is gonna be %OutputName%_editor.dll.
-set OutputName=zeus
+set OutputName=zdemo
 
 rem Common compiler flags for all projects:
 rem -TC					  	   	   	- treat source files only as a pure C code, no C++ at all.
@@ -42,26 +42,18 @@ rem 'user32.lib'  			 		- for windows API general functions.
 rem 'shell32.lib'					- for windows API shell functions, like SHGetKnownFolderPath().
 rem 'advapi32.lib'					- for windows API "advanced" functions, such as GetUserNameA().
 rem 'gdi32.lib'						- for windows API graphics functions, such as GetDC() or ReleaseDC().
-rem 'ole32.lib'						- for Component-Object-Model (COM) interface.
-rem 'comctl32.lib'					- for Common Controls support.
+rem 'ole32.lib'						- for Component-Object-Model (COM) technology.
 rem 'winmm.lib'						- for mmsystem.h interface, timeBeginPeriod()/timeEndPeriod().
-rem 'wbemuuid.lib'					- for IWbem* COM interfaces (Windows Management Instrumentation).
-rem 'dbghelp.lib'					- for debug utilities, such as minidump, stack trace, etc...
-rem 'mapi32.lib'					- for emailing crash reports.
-rem 'dxguid.lib'					- for DirectX GUID definitions.
-rem 'opengl32.lib'					- for OpenGL compatibility-profile interface.
 pushd build
 rem ..\devtools\timestamp.exe -begin %OutputName%.tsf
-cl -Fe%OutputName%.exe -Fm%OutputName%.map %CommonCompilerFlags% ..\zeus.cpp /link %CommonLinkerFlags% user32.lib shell32.lib advapi32.lib gdi32.lib ole32.lib comctl32.lib winmm.lib wbemuuid.lib dbghelp.lib mapi32.lib dxguid.lib opengl32.lib -pdb:%OutputName%.pdb
+cl -Fe%OutputName%.exe -Fm%OutputName%.map %CommonCompilerFlags% ..\game.cpp /link %CommonLinkerFlags% user32.lib shell32.lib advapi32.lib gdi32.lib ole32.lib winmm.lib -pdb:%OutputName%.pdb
 rem ..\devtools\timestamp.exe -end %OutputName%.tsf %ERRORLEVEL%
 popd
 
 rem Compile 'ents'.
 rem We name the PDB here with %RANDOM% prefix so the live code reloading tenchnique works properly.
 rem We also silently remove all previously generated PDBs for cleanness.
-rem pushd build
-rem del %OutputName%_ents_*.pdb > NUL 2> NUL
-rem ..\devtools\timestamp.exe -begin %OutputName%_ents.tsf
-rem cl -Fe%OutputName%_ents.dll -Fm%OutputName%_ents.map %CommonCompilerFlags% ..\ents.c /link %CommonLinkerFlags% -pdb:%OutputName%_ents_%RANDOM%.pdb -dll
-rem ..\devtools\timestamp.exe -end %OutputName%_ents.tsf %ERRORLEVEL%
-rem popd
+pushd build
+del %OutputName%_ents_*.pdb > NUL 2> NUL
+cl -Fe%OutputName%_ents.dll -Fm%OutputName%_ents.map %CommonCompilerFlags% ..\ents.cpp /link %CommonLinkerFlags% -pdb:%OutputName%_ents_%RANDOM%.pdb -dll -export:RegisterAllEntities
+popd

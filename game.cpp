@@ -1,19 +1,19 @@
-#include "zeus.h"
-#include "zeus_platform.h"
-#include "zeus_memory.h"
-#include "zeus_math.h"
-#include "zeus_misc.h"
-#include "zeus_draw.h"
-#include "zeus_image.h"
+#include "game.h"
+#include "game_platform.h"
+#include "game_memory.h"
+#include "game_math.h"
+#include "game_misc.h"
+#include "game_draw.h"
+#include "game_image.h"
 #if WIN32
-#include "zeus_platform_win32.cpp"
+#include "game_platform_win32.cpp"
 #else
 #error "Unsupported target platform!"
 #endif
-#include "zeus_memory.cpp"
-#include "zeus_misc.cpp"
-#include "zeus_draw.cpp"
-#include "zeus_image.cpp"
+#include "game_memory.cpp"
+#include "game_misc.cpp"
+#include "game_draw.cpp"
+#include "game_image.cpp"
 
 inline void
 PushConfigurationEntry(platform_state *PlatformState,
@@ -52,11 +52,7 @@ PushConfigurationEntry(platform_state *PlatformState,
 	}
 }
 
-game_config
-LoadConfiguration(platform_state *PlatformState,
-				  platform_api *PlatformAPI,
-				  const char *FileName,
-				  game_config *Config)
+LOAD_CONFIGURATION(LoadConfiguration)
 {
 	Assert(PlatformAPI);
 	Assert(FileName);
@@ -104,11 +100,7 @@ LoadConfiguration(platform_state *PlatformState,
 	return Result;
 }
 		
-void
-SaveConfiguration(platform_state *PlatformState,
-				  platform_api *PlatformAPI,
-				  const char *FileName,
-				  game_config *Config)
+SAVE_CONFIGURATION(SaveConfiguration)
 {
 	Assert(PlatformState);
 	Assert(PlatformAPI);
@@ -141,8 +133,7 @@ SaveConfiguration(platform_state *PlatformState,
 	LeaveTicketMutex(&Config->ConfigMutex);
 }
 
-void
-FreeConfiguration(platform_api *PlatformAPI, game_config *Config)
+FREE_CONFIGURATION(FreeConfiguration)
 {
 	Assert(Config);
 
@@ -152,6 +143,170 @@ FreeConfiguration(platform_api *PlatformAPI, game_config *Config)
 	Config->LastEntry = 0;
 
 	LeaveTicketMutex(&Config->ConfigMutex);
+}
+
+GET_CONFIGURATION_VALUE(GetConfigurationValue)
+{
+	Assert(Config);
+	Assert(Name);
+	Assert(Default);
+
+	EnterTicketMutex(&Config->ConfigMutex);
+
+	for (game_config_entry *Entry = Config->LastEntry; Entry; Entry = Entry->Prev) {
+		if (strcmp(Entry->Name, Name) == 0) {
+			LeaveTicketMutex(&Config->ConfigMutex);
+			return Entry->Value;
+		}
+	}
+
+	LeaveTicketMutex(&Config->ConfigMutex);
+	return Default;
+}
+
+REG_ENTITY_DESC(RegEntityDesc)
+{
+	Assert(PlatformState);
+	Assert(PlatformAPI);
+	Assert(GameState);
+	Assert(Name);
+	Assert(StateBytes);
+	Assert(UpdateGameEntity);
+
+	EnterTicketMutex(&GameState->EntityMutex);
+
+	// NOTE(ivan): Check whether is already registered.
+	for (game_entity_desc *Desc = GameState->EntitiesDesc; Desc; Desc = Desc->Next) {
+		if (strcmp(Desc->Name, Name) == 0) {
+			LeaveTicketMutex(&GameState->EntityMutex);
+			return;
+		}
+	}
+
+	// NOTE(ivan): Register entity desc.
+	PlatformAPI->Log(PlatformState, "Registering entity-desc [%s]...", Name);
+
+	game_entity_desc *NewDesc = PushPoolType(PlatformState,
+											 PlatformAPI,
+											 &GameState->EntitiesDescPool,
+											 game_entity_desc);
+	if (!NewDesc) {
+		LeaveTicketMutex(&GameState->EntityMutex);
+		PlatformAPI->Error(PlatformState, "Cannot register, out of memory!");
+	}
+
+	memset(NewDesc, 0, sizeof(game_entity_desc));
+	strncpy(NewDesc->Name, Name, CountOf(NewDesc->Name) - 1);
+	NewDesc->StateBytes = StateBytes;
+	NewDesc->UpdateGameEntity = UpdateGameEntity;
+
+	NewDesc->Next = GameState->EntitiesDesc;
+	GameState->EntitiesDesc = NewDesc;
+
+	LeaveTicketMutex(&GameState->EntityMutex);
+}
+
+SPAWN_ENTITY(SpawnEntity)
+{
+	Assert(PlatformState);
+	Assert(PlatformAPI);
+	Assert(GameState);
+	Assert(Name);
+
+	EnterTicketMutex(&GameState->EntityMutex);
+
+	for (game_entity_desc *Desc = GameState->EntitiesDesc; Desc; Desc = Desc->Next) {
+		if (strcmp(Desc->Name, Name) == 0) {
+			PlatformAPI->Log(PlatformState, "Spawning entity [%s:%d]...", Name, GameState->NextEntityId);
+			
+			game_entity *NewEntity = PushPoolType(PlatformState,
+												  PlatformAPI,
+												  &GameState->EntitiesPool,
+												  game_entity);
+			if (!NewEntity) {
+				LeaveTicketMutex(&GameState->EntityMutex);
+				PlatformAPI->Error(PlatformState, "Cannot spawn, out of memory!");
+			}
+
+			memset(NewEntity, 0, sizeof(game_entity));
+			strncpy(NewEntity->Name, Name, CountOf(NewEntity->Name) - 1);
+			NewEntity->Id = GameState->NextEntityId++;
+			NewEntity->State = PlatformAPI->AllocateMemory(Desc->StateBytes);
+			if (!NewEntity->State) {
+				LeaveTicketMutex(&GameState->EntityMutex);
+				PlatformAPI->Error(PlatformState, "Cannot spawn, out of memory!");
+			}
+			NewEntity->UpdateGameEntity = Desc->UpdateGameEntity;
+			NewEntity->Pos = Pos;
+
+			NewEntity->Next = GameState->Entities;
+			if (GameState->Entities)
+				GameState->Entities->Prev = NewEntity;
+			GameState->Entities = NewEntity;
+
+			NewEntity->UpdateGameEntity(GameStateType_Prepare, NewEntity->State);
+			
+			break;
+		}
+	}
+
+	LeaveTicketMutex(&GameState->EntityMutex);
+}
+
+KILL_ENTITY(KillEntity)
+{
+	Assert(PlatformAPI);
+	Assert(GameState);
+
+	EnterTicketMutex(&GameState->EntityMutex);
+
+	for (game_entity *Entity = GameState->Entities; Entity; Entity = Entity->Next) {
+		if (Entity->Id == Id) {
+			Entity->UpdateGameEntity(GameStateType_Release, Entity->State);
+
+			if (!Entity->Next && !Entity->Prev) {
+				GameState->Entities = 0;
+			} else {
+				if (Entity->Next)
+					Entity->Next->Prev = Entity->Prev;
+				if (Entity->Prev)
+					Entity->Prev->Next = Entity->Next;
+			}
+
+			PlatformAPI->DeallocateMemory(Entity->State);
+			
+			FreePoolType(&GameState->EntitiesPool,
+						 Entity);
+
+			break;
+		}
+	}
+
+	LeaveTicketMutex(&GameState->EntityMutex);
+}
+
+static void
+KillAllEntities(platform_api *PlatformAPI,
+				game_state *GameState)
+{
+	Assert(GameState);
+
+	EnterTicketMutex(&GameState->EntityMutex);
+	
+	game_entity *Entity = GameState->Entities;
+	while (Entity) {
+		game_entity *EntityToDelete = Entity;
+		Entity = Entity->Next;
+
+		EntityToDelete->UpdateGameEntity(GameStateType_Release, Entity->State);
+
+		PlatformAPI->DeallocateMemory(EntityToDelete->State);
+			
+		FreePoolType(&GameState->EntitiesPool,
+					 EntityToDelete);
+	}
+
+	LeaveTicketMutex(&GameState->EntityMutex);
 }
 
 void
@@ -181,39 +336,34 @@ UpdateGame(platform_state *PlatformState,
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "default.cfg", 0);
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 
-		State->TestImage = LoadBMP(PlatformState, PlatformAPI, "data\\hhtest.bmp");
-
-		State->PlayerPosX = 100.0f;
-		State->PlayerPosY = 100.0f;
+		// NOTE(ivan): Prepare entity system.
+		InitializeMemoryPool(PlatformState,
+							 PlatformAPI,
+							 &State->EntitiesPool,
+							 "EntitiesPool",
+							 sizeof(game_entity),
+							 256,
+							 0);
+		InitializeMemoryPool(PlatformState,
+							 PlatformAPI,
+							 &State->EntitiesDescPool,
+							 "EntitiesDescPool",
+							 sizeof(game_entity_desc),
+							 64,
+							 0);
 	} break;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game frame.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Frame: {
-		static const f32 PlayerSpeed = 60.0f;
-		f32 MovePlayerX = 0.0f;
-		f32 MovePlayerY = 0.0f;
-		if (Input->KeyboardButtons[KeyCode_W].IsDown)
-			MovePlayerY -= PlayerSpeed * (f32)Clocks->SecondsPerFrame;
-		if (Input->KeyboardButtons[KeyCode_S].IsDown)
-			MovePlayerY += PlayerSpeed * (f32)Clocks->SecondsPerFrame;
-		if (Input->KeyboardButtons[KeyCode_A].IsDown)
-			MovePlayerX -= PlayerSpeed * (f32)Clocks->SecondsPerFrame;
-		if (Input->KeyboardButtons[KeyCode_D].IsDown)
-			MovePlayerX += PlayerSpeed * (f32)Clocks->SecondsPerFrame;
-		if (MovePlayerX && MovePlayerY) {
-			MovePlayerX *= 0.707106781187f;
-			MovePlayerY *= 0.707106781187f;
-		}
-		State->PlayerPosX += MovePlayerX;
-		State->PlayerPosY += MovePlayerY;
-		
+		// NOTE(ivan): Clear surface buffer.
         DrawSolidColor(SurfaceBuffer, MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
-		
-		DrawImage(SurfaceBuffer, MakeV2(State->PlayerPosX, State->PlayerPosY), &State->TestImage);
-		DrawRectangle(SurfaceBuffer, MakeV2(60.0f, 60.0f), MakeV2(160.0f, 160.0f), MakeRGBA(1.0f, 0.0f, 0.0f, 0.5f));
 
+		// NOTE(ivan): Update game entities.
+		for (game_entity *Entity = State->Entities; Entity; Entity = Entity->Next)
+			Entity->UpdateGameEntity(GameStateType_Frame, Entity->State);
+		
 		// NOTE(ivan): Free per-frame memory arena.
 		FreeMemoryStack(PlatformAPI, &State->FrameStack);
 	} break;
@@ -222,7 +372,13 @@ UpdateGame(platform_state *PlatformState,
 		// NOTE(ivan): Game release.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Release: {
-		FreeImage(PlatformAPI, &State->TestImage);
+		// NOTE(ivan): Release entity system.
+		KillAllEntities(PlatformAPI,
+						State);
+		FreeMemoryPool(PlatformAPI,
+					   &State->EntitiesPool);
+		FreeMemoryPool(PlatformAPI,
+					   &State->EntitiesDescPool);
 		
 		// NOTE(ivan): Save configuration.
 		SaveConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);

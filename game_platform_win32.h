@@ -1,7 +1,7 @@
-#ifndef WIN32_ZEUS_H
-#define WIN32_ZEUS_H
+#ifndef GAME_PLATFORM_WIN32_H
+#define GAME_PLATFORM_WIN32_H
 
-#include "zeus_platform.h"
+#include "game_platform.h"
 
 // NOTE(ivan): Compiler check.
 #if !MSVC
@@ -86,11 +86,11 @@ Win32GetClock(void)
 
 	return PerformanceCounter.QuadPart;
 }
-inline f64
+inline f32
 Win32GetSecondsElapsed(u64 Start, u64 End, u64 Frequency)
 {
 	u64 Diff = End - Start;
-	return (f64)(Diff / (f64)Frequency);
+	return (f32)(Diff / (f64)Frequency);
 }
 
 // NOTE(ivan): Work queue entry structure.
@@ -213,4 +213,4 @@ PLATFORM_READ_ENTIRE_FILE(Win32ReadEntireFile);
 PLATFORM_FREE_ENTIRE_FILE_MEMORY(Win32FreeEntireFileMemory);
 PLATFORM_WRITE_ENTIRE_FILE(Win32WriteEntireFile);
 
-#endif // #ifndef WIN32_ZEUS_H
+#endif // #ifndef GAME_PLATFORM_WIN32_H

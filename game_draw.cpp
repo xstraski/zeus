@@ -1,5 +1,5 @@
-#include "zeus.h"
-#include "zeus_draw.h"
+#include "game.h"
+#include "game_draw.h"
 
 // NOTE(ivan): Alpha blendin result structure.
 struct blending_result {

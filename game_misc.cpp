@@ -1,5 +1,5 @@
-#include "zeus.h"
-#include "zeus_misc.h"
+#include "game.h"
+#include "game_misc.h"
 
 tokenize_string_result
 TokenizeString(platform_api *PlatformAPI,

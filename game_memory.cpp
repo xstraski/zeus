@@ -1,4 +1,4 @@
-#include "zeus.h"
+#include "game.h"
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 // NOTE(ivan): Memory stack.
@@ -212,7 +212,7 @@ InitializeMemoryPool(platform_state *PlatformState,
 	Assert(DebugName);
 	Assert(BlockSize);
 	Assert(InitialBlocksCount);
-	Assert(DefaultMultiplier > 1);
+	Assert(DefaultMultiplier == 0 || DefaultMultiplier > 1);
 
 	EnterTicketMutex(&MemoryPool->PoolMutex);
 
@@ -258,12 +258,11 @@ FreeMemoryPool(platform_api *PlatformAPI,
 void *
 PushPoolSize(platform_state *PlatformState,
 			 platform_api *PlatformAPI,
-			 memory_pool *MemoryPool, uptr Bytes)
+			 memory_pool *MemoryPool)
 {
 	Assert(PlatformState);
 	Assert(PlatformAPI);
 	Assert(MemoryPool);
-	Assert(Bytes);
 
 	EnterTicketMutex(&MemoryPool->PoolMutex);
 

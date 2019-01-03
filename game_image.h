@@ -1,7 +1,7 @@
-#ifndef ZEUS_IMAGE_H
-#define ZEUS_IMAGE_H
+#ifndef GAME_IMAGE_H
+#define GAME_IMAGE_H
 
-#include "zeus_platform.h"
+#include "game_platform.h"
 
 // NOTE(ivan): Image structure.
 struct image {
@@ -20,4 +20,4 @@ image LoadBMP(platform_state *PlatformState,
 void FreeImage(platform_api *PlatformAPI,
 			   image *Image);
 
-#endif // #ifndef ZEUS_IMAGE_H
+#endif // #ifndef GAME_IMAGE_H

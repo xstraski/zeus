@@ -1,6 +1,6 @@
-#include "zeus.h"
-#include "zeus_platform.h"
-#include "zeus_platform_win32.h"
+#include "game.h"
+#include "game_platform.h"
+#include "game_platform_win32.h"
 
 #include <versionhelpers.h>
 #include <objbase.h>
@@ -744,6 +744,7 @@ Win32ToggleFullscreen(HWND Window,
 	Assert(Placement);
 
 	// NOTE(ivan): Big thanks for Raymond Chen from The Big New Thing blog for this routine!
+	// See: https://blogs.msdn.microsoft.com/oldnewthing/20100412-00/?p=14353
 	
 	DWORD Style = GetWindowLong(Window, GWL_STYLE);
 	if (Style & WS_OVERLAPPEDWINDOW) {

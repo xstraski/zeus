@@ -1,5 +1,5 @@
-#include "zeus.h"
-#include "zeus_image.h"
+#include "game.h"
+#include "game_image.h"
 
 // NOTE(ivan): Bitmap file header structure.
 #pragma pack(push, 1)

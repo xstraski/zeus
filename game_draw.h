@@ -1,9 +1,9 @@
-#ifndef ZEUS_DRAW_H
-#define ZEUS_DRAW_H
+#ifndef GAME_DRAW_H
+#define GAME_DRAW_H
 
-#include "zeus_platform.h"
-#include "zeus_math.h"
-#include "zeus_image.h"
+#include "game_platform.h"
+#include "game_math.h"
+#include "game_image.h"
 
 void DrawPixel(game_surface_buffer *Buffer,
 			   v2 Pos,
@@ -21,4 +21,4 @@ void DrawImage(game_surface_buffer *Buffer,
 void DrawSolidColor(game_surface_buffer *Buffer,
 					rgba Color);
 
-#endif // #ifndef ZEUS_DRAW_H
+#endif // #ifndef GAME_DRAW_H

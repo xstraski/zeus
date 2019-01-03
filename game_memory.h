@@ -1,7 +1,7 @@
-#ifndef ZEUS_MEMORY_H
-#define ZEUS_MEMORY_H
+#ifndef GAME_MEMORY_H
+#define GAME_MEMORY_H
 
-#include "zeus_platform.h"
+#include "game_platform.h"
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 // NOTE(ivan): Memory stack.
@@ -86,20 +86,17 @@ void InitializeMemoryPool(platform_state *PlatformState,
 						  const char *DebugName,
 						  u32 BlockSize,
 						  u32 InitialBlocksCount,
-						  u32 DefaultMultiplier);
+						  u32 DefaultMultiplier = 0);
 void FreeMemoryPool(platform_api *PlatformAPI,
 					memory_pool *MemoryPool);
 
-#define PushPoolType(MemoryPool, Type) (Type *)PushPoolSize(MemoryPool, sizeof(Type))
-#define PushPoolTypeArray(MemoryPool, Type, Count) (Type *)PushPoolSize(MemoryPool, sizeof(Type) * Count)
-void * PushPoolSize(memory_pool *MemoryPool,
-					uptr Bytes);
+#define PushPoolType(PlatformState, PlatformAPI, MemoryPool, Type) (Type *)PushPoolSize(PlatformState, PlatformAPI, MemoryPool)
+void * PushPoolSize(platform_state *PlatformState,
+					platform_api *PlatformAPI,
+					memory_pool *MemoryPool);
 
-#define FreePoolType(PlatformState, PlatformAPI, MemoryPool, Address) FreePoolSize(PlatformState, PlatformAPI, MemoryPool, Address)
-#define FreePoolTypeArray(PlatformState, PlatformAPI, MemoryPool, Address) FreePoolSize(PlatformState, PlatformAPI, MemoryPool, Address)
-void FreePoolSize(platform_state *PlatformState,
-				  platform_api *PlatformAPI,
-				  memory_pool *MemoryPool,
+#define FreePoolType(MemoryPool, Address) FreePoolSize(MemoryPool, Address)
+void FreePoolSize(memory_pool *MemoryPool,
 				  void *Address);
 
-#endif // #ifndef ZEUS_MEMORY_H
+#endif // #ifndef GAME_MEMORY_H

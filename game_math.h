@@ -1,7 +1,7 @@
-#ifndef ZEUS_MATH_H
-#define ZEUS_MATH_H
+#ifndef GAME_MATH_H
+#define GAME_MATH_H
 
-#include "zeus_platform.h"
+#include "game_platform.h"
 
 #define Square(A) ((A) * (A))
 #define Cube(A) ((A) * (A) * (A))
@@ -535,4 +535,4 @@ MakeRGBA(f32 R, f32 G, f32 B, f32 A)
 	return Result;
 }
 
-#endif // #ifndef ZEUS_MATH_H
+#endif // #ifndef GAME_MATH_H
