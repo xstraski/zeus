@@ -18,7 +18,4 @@ void DrawImage(game_surface_buffer *Buffer,
 			   v2 Pos,
 			   image *Image);
 
-void DrawSolidColor(game_surface_buffer *Buffer,
-					rgba Color);
-
 #endif // #ifndef GAME_DRAW_H

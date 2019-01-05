@@ -245,7 +245,7 @@ struct platform_api {
 	platform_check_param_value *CheckParamValue;
 	platform_log *Log;
 	platform_error *Error;
-	platform_allocate_memory *AllocateMemory;
+	platform_allocate_memory *AllocateMemory; // NOTE(ivan): This MUST return zero-initialized memory!!!
 	platform_deallocate_memory *DeallocateMemory;
 	platform_get_memory_stats *GetMemoryStats;
 	platform_add_work_queue_entry *AddWorkQueueEntry;

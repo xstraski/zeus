@@ -121,8 +121,10 @@ PushStackSize(platform_state *PlatformState,
 	if (MemoryStack->CurrentBlock) {
 		TargetBlock = MemoryStack->CurrentBlock;
 		while (TargetBlock) {
-			if (TargetBlock->BytesTotal - TargetBlock->BytesUsed >= Bytes)
+			if ((TargetBlock->BytesTotal - TargetBlock->BytesUsed) >= Bytes)
 				break;
+
+			TargetBlock = TargetBlock->Next;
 		}
 	}
 	if (!TargetBlock) {

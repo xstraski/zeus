@@ -177,29 +177,3 @@ DrawImage(game_surface_buffer *Buffer,
 		}
 	}
 }
-
-void
-DrawSolidColor(game_surface_buffer *Buffer,
-			   rgba Color)
-{
-	Assert(Buffer);
-    
-	u8 ColorR = (u8)roundf(Color.R * 255.0f);
-	u8 ColorG = (u8)roundf(Color.G * 255.0f);
-	u8 ColorB = (u8)roundf(Color.B * 255.0f);
-	u8 ColorA = (u8)roundf(Color.A * 255.0f);
-	u32 Color32 = (((u8)ColorA << 24) |
-				   ((u8)ColorR << 16) |
-				   ((u8)ColorG << 8) |
-				   ((u8)ColorB));
-	
-	u8 *Row = (u8 *)Buffer->Pixels;
-	for (s32 Y = 0; Y < Buffer->Height; Y++) {
-		u32 *Pixel = (u32 *)Row;
-		for (s32 X = 0; X < Buffer->Width; X++) {
-			*Pixel++ = Color32;
-		}
-		
-		Row += Buffer->Pitch;
-	}
-}

@@ -6,6 +6,7 @@
 #include "game_math.h"
 #include "game_keys.h"
 #include "game_image.h"
+#include "game_draw_group.h"
 
 // NOTE(ivan): Title.
 #define GAMENAME "ZDemo"
@@ -154,6 +155,9 @@ struct game_api {
 	save_configuration *SaveConfiguration;
 	free_configuration *FreeConfiguration;
 	get_configuration_value *GetConfigurationValue;
+
+	push_draw_group_rectangle *PushDrawGroupRectangle;
+	push_draw_group_image *PushDrawGroupImage;
 };
 
 LOAD_CONFIGURATION(LoadConfiguration);

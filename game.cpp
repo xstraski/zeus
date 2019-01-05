@@ -4,6 +4,7 @@
 #include "game_math.h"
 #include "game_misc.h"
 #include "game_draw.h"
+#include "game_draw_group.h"
 #include "game_image.h"
 #if WIN32
 #include "game_platform_win32.cpp"
@@ -13,7 +14,11 @@
 #include "game_memory.cpp"
 #include "game_misc.cpp"
 #include "game_draw.cpp"
+#include "game_draw_group.cpp"
 #include "game_image.cpp"
+
+// NOTE(ivan): Capacity of draw group buffer.
+#define MAX_DRAW_GROUP_BUFFER 2048
 
 inline void
 PushConfigurationEntry(platform_state *PlatformState,
@@ -195,6 +200,8 @@ UpdateGame(platform_state *PlatformState,
 		GameAPI.SaveConfiguration = SaveConfiguration;
 		GameAPI.FreeConfiguration = FreeConfiguration;
 		GameAPI.GetConfigurationValue = GetConfigurationValue;
+		GameAPI.PushDrawGroupRectangle = PushDrawGroupRectangle;
+		GameAPI.PushDrawGroupImage = PushDrawGroupImage;
 
 		// NOTE(ivan): Initialize per-frame stack.
 		InitializeMemoryStack(PlatformState,
@@ -223,9 +230,29 @@ UpdateGame(platform_state *PlatformState,
 		if (PlatformAPI->ShouldEntitiesModuleBeReloaded(PlatformState, EntitiesFileName))
 			PlatformAPI->ReloadEntitiesModule(PlatformState, EntitiesFileName, EntitiesTempFileName, EntitiesLockFileName, &GameAPI);
 #endif
+
+		// NOTE(ivan): Prepare draw group.
+		draw_group *PrimaryDrawGroup = PushStackType(PlatformState,
+													 PlatformAPI,
+													 &State->FrameStack,
+													 draw_group);
+		draw_basis DefaultBasis = {0, 0};
+		PrimaryDrawGroup->DefaultBasis = &DefaultBasis;
+		PrimaryDrawGroup->EntriesBase = (u8 *)PushStackSize(PlatformState,
+															PlatformAPI,
+															&State->FrameStack,
+															MAX_DRAW_GROUP_BUFFER);
+		PrimaryDrawGroup->EntriesBytes = 0;
+		PrimaryDrawGroup->EntriesMax = MAX_DRAW_GROUP_BUFFER;
 		
 		// NOTE(ivan): Clear surface buffer.
-        DrawSolidColor(SurfaceBuffer, MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
+        DrawRectangle(SurfaceBuffer,
+					  MakeV2(0.0f, 0.0f),
+					  MakeV2((f32)(SurfaceBuffer->Width - 1), (f32)(SurfaceBuffer->Height - 1)),
+					  MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
+
+		// NOTE(ivan): Present draw group to the surface buffer.
+		DrawGroup(PrimaryDrawGroup, SurfaceBuffer);
 
 		// NOTE(ivan): Free per-frame stack.
 		FreeMemoryStack(PlatformAPI, &State->FrameStack);
