@@ -2,6 +2,8 @@
 #include "game_platform.h"
 #include "game_platform_win32.h"
 
+#include "ents.h"
+
 #include <versionhelpers.h>
 #include <objbase.h>
 
@@ -321,6 +323,64 @@ PLATFORM_WRITE_ENTIRE_FILE(Win32WriteEntireFile)
 		CloseHandle(File);
 	}
 	return Result;
+}
+
+inline FILETIME
+Win32GetLastWriteTime(const char *FileName)
+{
+	Assert(FileName);
+
+	FILETIME Result = {};
+
+	WIN32_FILE_ATTRIBUTE_DATA Data;
+	if (GetFileAttributesEx(FileName, GetFileExInfoStandard, &Data))
+		Result = Data.ftLastWriteTime;
+
+	return Result;
+}
+
+PLATFORM_RELOAD_ENTITIES_MODULE(Win32ReloadEntitiesModule)
+{
+	Assert(PlatformState);
+	Assert(FileName);
+	Assert(TempFileName);
+	Assert(LockFileName);
+	Assert(GameAPI);
+
+	if (PlatformState->EntitiesLibrary) {
+		FreeLibrary(PlatformState->EntitiesLibrary);
+		PlatformState->EntitiesLibrary = 0;
+	}
+	
+	WIN32_FILE_ATTRIBUTE_DATA LockData;
+	if (!GetFileAttributesEx(LockFileName, GetFileExInfoStandard, &LockData)) {
+		PlatformState->EntitiesLibraryLastWriteTime = Win32GetLastWriteTime(FileName);
+
+		CopyFileA(FileName, TempFileName, FALSE);
+
+		PlatformState->EntitiesLibrary = LoadLibraryA(TempFileName);
+		if (!PlatformState->EntitiesLibrary)
+			Win32Error(PlatformState, "Failed loading entities module!");
+
+		register_all_entities *RegisterAllEntities = (register_all_entities *)GetProcAddress(PlatformState->EntitiesLibrary,
+																							 "RegisterAllEntities");
+		if (!RegisterAllEntities)
+			Win32Error(PlatformState, "Failed verifying entities module!");
+
+		RegisterAllEntities(GameAPI);
+	}
+}
+
+PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(Win32ShouldEntitiesModuleBeReloaded)
+{
+	Assert(PlatformState);
+	Assert(FileName);
+	
+	FILETIME LastWriteTime = Win32GetLastWriteTime(FileName);
+	if (CompareFileTime(&LastWriteTime, &PlatformState->EntitiesLibraryLastWriteTime))
+		return true;
+
+	return false;
 }
 
 // NOTE(ivan): Dummy stubs for the case when XInput is not available.
@@ -945,9 +1005,15 @@ WinMain(HINSTANCE Instance,
 	PlatformAPI.ReadEntireFile = Win32ReadEntireFile;
 	PlatformAPI.FreeEntireFileMemory = Win32FreeEntireFileMemory;
 	PlatformAPI.WriteEntireFile = Win32WriteEntireFile;
+	PlatformAPI.ReloadEntitiesModule = Win32ReloadEntitiesModule;
+	PlatformAPI.ShouldEntitiesModuleBeReloaded = Win32ShouldEntitiesModuleBeReloaded;
 
 	PlatformAPI.HighPriorityWorkQueue = &PlatformState.HighPriorityWorkQueue;
 	PlatformAPI.LowPriorityWorkQueue = &PlatformState.LowPriorityWorkQueue;
+
+	PlatformAPI.ExePath = PlatformState.ExePath;
+	PlatformAPI.ExeName = PlatformState.ExeName;
+	PlatformAPI.ExeNameNoExt = PlatformState.ExeNameNoExt;
 
 	// NOTE(ivan): Initialize input structure for future use.
 	game_input Input = {};
@@ -1025,7 +1091,7 @@ WinMain(HINSTANCE Instance,
 			TranslateMessage(&Msg);
 			DispatchMessageA(&Msg);
 		}
-		
+
 		// NOTE(ivan): Process XInput controller state.
 		// TODO(ivan): Monitor XInput controllers for being plugged in after the fact!
 		b32 XBoxControllerPresent[XUSER_MAX_COUNT];
@@ -1192,6 +1258,12 @@ WinMain(HINSTANCE Instance,
 			   0,
 			   0,
 			   State);
+
+	// NOTE(ivan): Release entities module.
+	if (PlatformState.EntitiesLibrary) {
+		FreeLibrary(PlatformState.EntitiesLibrary);
+		PlatformState.EntitiesLibrary = 0;
+	}
 
 	// NOTE(ivan): Destroy game state.
 	Win32DeallocateMemory(State);

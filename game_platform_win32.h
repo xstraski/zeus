@@ -182,8 +182,6 @@ struct platform_state {
 
 	u64 PerformanceFrequency;
 
-	ticket_mutex MemoryMutex; // NOTE(ivan): Mutex for Win32AllocateMemory()/Win32DeallocateMemory().
-
 	work_queue HighPriorityWorkQueue;
 	work_queue LowPriorityWorkQueue;
 	
@@ -192,12 +190,16 @@ struct platform_state {
 	WINDOWPLACEMENT MainWindowPlacement;
 
 	b32 DebugCursor; // NOTE(ivan): Whether to show the cross cursor upon main window or not.
-
+	
 	// NOTE(ivan): Off-screen graphics back buffer.
 	win32_surface_buffer SurfaceBuffer;
 
 	// NOTE(ivan): Input stuff.
 	x_input XInput;
+
+	// NOTE(ivan): Game entities module information.
+	HMODULE EntitiesLibrary;
+	FILETIME EntitiesLibraryLastWriteTime;
 };
 
 PLATFORM_CHECK_PARAM(Win32CheckParam);
@@ -212,5 +214,7 @@ PLATFORM_COMPLETE_WORK_QUEUE(Win32CompleteWorkQueue);
 PLATFORM_READ_ENTIRE_FILE(Win32ReadEntireFile);
 PLATFORM_FREE_ENTIRE_FILE_MEMORY(Win32FreeEntireFileMemory);
 PLATFORM_WRITE_ENTIRE_FILE(Win32WriteEntireFile);
+PLATFORM_RELOAD_ENTITIES_MODULE(Win32ReloadEntitiesModule);
+PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(Win32ShouldEntitiesModuleBeReloaded);
 
 #endif // #ifndef GAME_PLATFORM_WIN32_H

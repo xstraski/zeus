@@ -113,32 +113,6 @@ enum game_state_type {
 	GameStateType_Frame
 };
 
-// NOTE(ivan): Game entity update function prototype.
-#define UPDATE_GAME_ENTITY(name) void name(game_state_type StateType, void *State)
-typedef UPDATE_GAME_ENTITY(update_game_entity);
-
-// NOTE(ivan): Game entity.
-struct game_entity {
-	char Name[64];
-	u32 Id;
-	void *State;
-	update_game_entity *UpdateGameEntity;
-
-	v2 Pos;
-
-	game_entity *Next;
-	game_entity *Prev;
-};
-
-// NOTE(ivan): Game entity desc.
-struct game_entity_desc {
-	char Name[64];
-	uptr StateBytes;
-	update_game_entity *UpdateGameEntity;
-
-	game_entity_desc *Next;
-};
-
 // NOTE(ivan): Game state.
 // NOTE(ivan): Game state structure allocated in platform layer MUST be ZEROED.
 struct game_state {
@@ -146,15 +120,6 @@ struct game_state {
 	game_config Config;
 
 	memory_stack FrameStack;
-
-	// NOTE(ivan): Entity system.
-	memory_pool EntitiesPool;
-	memory_pool EntitiesDescPool;
-	game_entity *Entities;
-	game_entity_desc *EntitiesDesc;
-	ticket_mutex EntityMutex;
-
-	u32 NextEntityId;
 };
 
 // NOTE(ivan): This is program's main body, gets called each frame.
@@ -178,15 +143,6 @@ typedef FREE_CONFIGURATION(free_configuration);
 #define GET_CONFIGURATION_VALUE(name) const char * name (game_config *Config, const char *Name, const char *Default)
 typedef GET_CONFIGURATION_VALUE(get_configuration_value);
 
-#define REG_ENTITY_DESC(name) void name(platform_state *PlatformState, platform_api *PlatformAPI, game_state *GameState, const char *Name, uptr StateBytes, update_game_entity *UpdateGameEntity)
-typedef REG_ENTITY_DESC(reg_entity_desc);
-
-#define SPAWN_ENTITY(name) void name(platform_state *PlatformState, platform_api *PlatformAPI, game_state *GameState, const char *Name, v2 Pos)
-typedef SPAWN_ENTITY(spawn_entity);
-
-#define KILL_ENTITY(name) void name(platform_api *PlatformAPI, game_state *GameState, u32 Id)
-typedef KILL_ENTITY(kill_entity);
-
 // NOTE(ivan): Game API exported to entities module.
 struct game_api {
 	platform_state *PlatformState;
@@ -196,18 +152,13 @@ struct game_api {
 
 	load_configuration *LoadConfiguration;
 	save_configuration *SaveConfiguration;
+	free_configuration *FreeConfiguration;
 	get_configuration_value *GetConfigurationValue;
-
-	reg_entity_desc *RegEntityDesc;
-	spawn_entity *SpawnEntity;
-	kill_entity *KillEntity;
 };
 
 LOAD_CONFIGURATION(LoadConfiguration);
 SAVE_CONFIGURATION(SaveConfiguration);
 FREE_CONFIGURATION(FreeConfiguration);
 GET_CONFIGURATION_VALUE(GetConfigurationValue);
-REG_ENTITY_DESC(RegEntityDesc);
-SPAWN_ENTITY(SpawnEntity);
 
 #endif // #ifndef GAME_H

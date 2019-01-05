@@ -3,8 +3,8 @@
 
 #include "game.h"
 
-// NOTE(ivan): Exported to the engine, registers all its entities.
-#define REGISTER_ALL_ENTITIES(name) void name(void)
+// NOTE(ivan): Game entities exported to the engine function prototoype.
+#define REGISTER_ALL_ENTITIES(name) void name(game_api *GameAPI)
 typedef REGISTER_ALL_ENTITIES(register_all_entities);
 
 #endif // #ifndef ENTS_H

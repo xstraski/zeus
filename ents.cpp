@@ -1,4 +1,6 @@
 #include "ents.h"
 
-extern "C" REGISTER_ALL_ENTITIES(RegisterAllEntities)
-{}
+REGISTER_ALL_ENTITIES(RegisterAllEntities)
+{
+	Assert(GameAPI);
+}

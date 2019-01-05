@@ -164,151 +164,6 @@ GET_CONFIGURATION_VALUE(GetConfigurationValue)
 	return Default;
 }
 
-REG_ENTITY_DESC(RegEntityDesc)
-{
-	Assert(PlatformState);
-	Assert(PlatformAPI);
-	Assert(GameState);
-	Assert(Name);
-	Assert(StateBytes);
-	Assert(UpdateGameEntity);
-
-	EnterTicketMutex(&GameState->EntityMutex);
-
-	// NOTE(ivan): Check whether is already registered.
-	for (game_entity_desc *Desc = GameState->EntitiesDesc; Desc; Desc = Desc->Next) {
-		if (strcmp(Desc->Name, Name) == 0) {
-			LeaveTicketMutex(&GameState->EntityMutex);
-			return;
-		}
-	}
-
-	// NOTE(ivan): Register entity desc.
-	PlatformAPI->Log(PlatformState, "Registering entity-desc [%s]...", Name);
-
-	game_entity_desc *NewDesc = PushPoolType(PlatformState,
-											 PlatformAPI,
-											 &GameState->EntitiesDescPool,
-											 game_entity_desc);
-	if (!NewDesc) {
-		LeaveTicketMutex(&GameState->EntityMutex);
-		PlatformAPI->Error(PlatformState, "Cannot register, out of memory!");
-	}
-
-	memset(NewDesc, 0, sizeof(game_entity_desc));
-	strncpy(NewDesc->Name, Name, CountOf(NewDesc->Name) - 1);
-	NewDesc->StateBytes = StateBytes;
-	NewDesc->UpdateGameEntity = UpdateGameEntity;
-
-	NewDesc->Next = GameState->EntitiesDesc;
-	GameState->EntitiesDesc = NewDesc;
-
-	LeaveTicketMutex(&GameState->EntityMutex);
-}
-
-SPAWN_ENTITY(SpawnEntity)
-{
-	Assert(PlatformState);
-	Assert(PlatformAPI);
-	Assert(GameState);
-	Assert(Name);
-
-	EnterTicketMutex(&GameState->EntityMutex);
-
-	for (game_entity_desc *Desc = GameState->EntitiesDesc; Desc; Desc = Desc->Next) {
-		if (strcmp(Desc->Name, Name) == 0) {
-			PlatformAPI->Log(PlatformState, "Spawning entity [%s:%d]...", Name, GameState->NextEntityId);
-			
-			game_entity *NewEntity = PushPoolType(PlatformState,
-												  PlatformAPI,
-												  &GameState->EntitiesPool,
-												  game_entity);
-			if (!NewEntity) {
-				LeaveTicketMutex(&GameState->EntityMutex);
-				PlatformAPI->Error(PlatformState, "Cannot spawn, out of memory!");
-			}
-
-			memset(NewEntity, 0, sizeof(game_entity));
-			strncpy(NewEntity->Name, Name, CountOf(NewEntity->Name) - 1);
-			NewEntity->Id = GameState->NextEntityId++;
-			NewEntity->State = PlatformAPI->AllocateMemory(Desc->StateBytes);
-			if (!NewEntity->State) {
-				LeaveTicketMutex(&GameState->EntityMutex);
-				PlatformAPI->Error(PlatformState, "Cannot spawn, out of memory!");
-			}
-			NewEntity->UpdateGameEntity = Desc->UpdateGameEntity;
-			NewEntity->Pos = Pos;
-
-			NewEntity->Next = GameState->Entities;
-			if (GameState->Entities)
-				GameState->Entities->Prev = NewEntity;
-			GameState->Entities = NewEntity;
-
-			NewEntity->UpdateGameEntity(GameStateType_Prepare, NewEntity->State);
-			
-			break;
-		}
-	}
-
-	LeaveTicketMutex(&GameState->EntityMutex);
-}
-
-KILL_ENTITY(KillEntity)
-{
-	Assert(PlatformAPI);
-	Assert(GameState);
-
-	EnterTicketMutex(&GameState->EntityMutex);
-
-	for (game_entity *Entity = GameState->Entities; Entity; Entity = Entity->Next) {
-		if (Entity->Id == Id) {
-			Entity->UpdateGameEntity(GameStateType_Release, Entity->State);
-
-			if (!Entity->Next && !Entity->Prev) {
-				GameState->Entities = 0;
-			} else {
-				if (Entity->Next)
-					Entity->Next->Prev = Entity->Prev;
-				if (Entity->Prev)
-					Entity->Prev->Next = Entity->Next;
-			}
-
-			PlatformAPI->DeallocateMemory(Entity->State);
-			
-			FreePoolType(&GameState->EntitiesPool,
-						 Entity);
-
-			break;
-		}
-	}
-
-	LeaveTicketMutex(&GameState->EntityMutex);
-}
-
-static void
-KillAllEntities(platform_api *PlatformAPI,
-				game_state *GameState)
-{
-	Assert(GameState);
-
-	EnterTicketMutex(&GameState->EntityMutex);
-	
-	game_entity *Entity = GameState->Entities;
-	while (Entity) {
-		game_entity *EntityToDelete = Entity;
-		Entity = Entity->Next;
-
-		EntityToDelete->UpdateGameEntity(GameStateType_Release, Entity->State);
-
-		PlatformAPI->DeallocateMemory(EntityToDelete->State);
-			
-		FreePoolType(&GameState->EntitiesPool,
-					 EntityToDelete);
-	}
-
-	LeaveTicketMutex(&GameState->EntityMutex);
-}
-
 void
 UpdateGame(platform_state *PlatformState,
 		   platform_api *PlatformAPI,
@@ -320,12 +175,28 @@ UpdateGame(platform_state *PlatformState,
 	UnreferencedParam(Clocks);
 	UnreferencedParam(SurfaceBuffer);
 	UnreferencedParam(Input);
+
+	static game_api GameAPI = {};
+
+	static char EntitiesFileName[1024] = {};
+	static char EntitiesTempFileName[1024] = {};
+	static char EntitiesLockFileName[1024] = {};
 	
 	switch (State->Type) {
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game initialization.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Prepare: {
+		// NOTE(ivan): Prepare game interface.
+		GameAPI.PlatformState = PlatformState;
+		GameAPI.PlatformAPI = PlatformAPI;
+		GameAPI.GameState = State;
+		GameAPI.LoadConfiguration = LoadConfiguration;
+		GameAPI.SaveConfiguration = SaveConfiguration;
+		GameAPI.FreeConfiguration = FreeConfiguration;
+		GameAPI.GetConfigurationValue = GetConfigurationValue;
+
+		// NOTE(ivan): Initialize per-frame stack.
 		InitializeMemoryStack(PlatformState,
 							  PlatformAPI,
 							  &State->FrameStack,
@@ -336,35 +207,27 @@ UpdateGame(platform_state *PlatformState,
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "default.cfg", 0);
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 
-		// NOTE(ivan): Prepare entity system.
-		InitializeMemoryPool(PlatformState,
-							 PlatformAPI,
-							 &State->EntitiesPool,
-							 "EntitiesPool",
-							 sizeof(game_entity),
-							 256,
-							 0);
-		InitializeMemoryPool(PlatformState,
-							 PlatformAPI,
-							 &State->EntitiesDescPool,
-							 "EntitiesDescPool",
-							 sizeof(game_entity_desc),
-							 64,
-							 0);
+		// NOTE(ivan): Load entities.
+		snprintf(EntitiesFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.dll", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
+		snprintf(EntitiesTempFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.tmp", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
+		snprintf(EntitiesLockFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.lck", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
+		PlatformAPI->ReloadEntitiesModule(PlatformState, EntitiesFileName, EntitiesTempFileName, EntitiesLockFileName, &GameAPI);
 	} break;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game frame.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Frame: {
+#if INTERNAL		
+		// NOTE(ivan): Reload entities if necessary.
+		if (PlatformAPI->ShouldEntitiesModuleBeReloaded(PlatformState, EntitiesFileName))
+			PlatformAPI->ReloadEntitiesModule(PlatformState, EntitiesFileName, EntitiesTempFileName, EntitiesLockFileName, &GameAPI);
+#endif
+		
 		// NOTE(ivan): Clear surface buffer.
         DrawSolidColor(SurfaceBuffer, MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 
-		// NOTE(ivan): Update game entities.
-		for (game_entity *Entity = State->Entities; Entity; Entity = Entity->Next)
-			Entity->UpdateGameEntity(GameStateType_Frame, Entity->State);
-		
-		// NOTE(ivan): Free per-frame memory arena.
+		// NOTE(ivan): Free per-frame stack.
 		FreeMemoryStack(PlatformAPI, &State->FrameStack);
 	} break;
 
@@ -372,14 +235,6 @@ UpdateGame(platform_state *PlatformState,
 		// NOTE(ivan): Game release.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Release: {
-		// NOTE(ivan): Release entity system.
-		KillAllEntities(PlatformAPI,
-						State);
-		FreeMemoryPool(PlatformAPI,
-					   &State->EntitiesPool);
-		FreeMemoryPool(PlatformAPI,
-					   &State->EntitiesDescPool);
-		
 		// NOTE(ivan): Save configuration.
 		SaveConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 		FreeConfiguration(PlatformAPI, &State->Config);

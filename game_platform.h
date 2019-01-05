@@ -181,7 +181,7 @@ struct work_queue;
 #define WORK_QUEUE_CALLBACK(name) void name(work_queue *Queue, void *Data)
 typedef WORK_QUEUE_CALLBACK(work_queue_callback);
 
-// NOTE(ivan): Generic-purpose structure for holding a memory piece information.
+// NOTE(ivan): Generic-purpose structure for holding a memory piece of information.
 struct piece {
 	u8 *Memory;
 	uptr Bytes;
@@ -233,6 +233,12 @@ typedef PLATFORM_FREE_ENTIRE_FILE_MEMORY(platform_free_entire_file_memory);
 #define PLATFORM_WRITE_ENTIRE_FILE(name) b32 name(const char *FileName, void *Memory, u32 Bytes)
 typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 
+#define PLATFORM_RELOAD_ENTITIES_MODULE(name) void name(platform_state *PlatformState, const char *FileName, const char *TempFileName, const char *LockFileName, struct game_api *GameAPI)
+typedef PLATFORM_RELOAD_ENTITIES_MODULE(platform_reload_entities_module);
+
+#define PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(name) b32 name(platform_state *PlatformState, const char *FileName)
+typedef PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(platform_should_entities_module_be_reloaded);
+
 // NOTE(ivan): Platform-specific interface container structure.
 struct platform_api {
 	platform_check_param *CheckParam;
@@ -247,10 +253,17 @@ struct platform_api {
 	platform_read_entire_file *ReadEntireFile;
 	platform_free_entire_file_memory *FreeEntireFileMemory;
 	platform_write_entire_file *WriteEntireFile;
+	platform_reload_entities_module *ReloadEntitiesModule;
+	platform_should_entities_module_be_reloaded *ShouldEntitiesModuleBeReloaded;
 
 	// NOTE(ivan): Work queues.
 	work_queue *HighPriorityWorkQueue;
 	work_queue *LowPriorityWorkQueue;
+
+	// NOTE(ivan): Executable information.
+	char *ExePath;
+	char *ExeName;
+	char *ExeNameNoExt;
 
 	b32 QuitRequested; // NOTE(ivan): Set this to true to request program exit.
 };

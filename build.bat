@@ -45,9 +45,7 @@ rem 'gdi32.lib'						- for windows API graphics functions, such as GetDC() or Re
 rem 'ole32.lib'						- for Component-Object-Model (COM) technology.
 rem 'winmm.lib'						- for mmsystem.h interface, timeBeginPeriod()/timeEndPeriod().
 pushd build
-rem ..\devtools\timestamp.exe -begin %OutputName%.tsf
 cl -Fe%OutputName%.exe -Fm%OutputName%.map %CommonCompilerFlags% ..\game.cpp /link %CommonLinkerFlags% user32.lib shell32.lib advapi32.lib gdi32.lib ole32.lib winmm.lib -pdb:%OutputName%.pdb
-rem ..\devtools\timestamp.exe -end %OutputName%.tsf %ERRORLEVEL%
 popd
 
 rem Compile 'ents'.
@@ -55,5 +53,7 @@ rem We name the PDB here with %RANDOM% prefix so the live code reloading tenchni
 rem We also silently remove all previously generated PDBs for cleanness.
 pushd build
 del %OutputName%_ents_*.pdb > NUL 2> NUL
+echo "WAITING FOR PDB" > %OutputName%_ents.lck
 cl -Fe%OutputName%_ents.dll -Fm%OutputName%_ents.map %CommonCompilerFlags% ..\ents.cpp /link %CommonLinkerFlags% -pdb:%OutputName%_ents_%RANDOM%.pdb -dll -export:RegisterAllEntities
+del %OutputName%_ents.lck
 popd
