@@ -4,10 +4,10 @@
 // NOTE(ivan): Compiler detection.
 #if defined(_MSC_VER)
 #define MSVC 1
-#define GNUC 0
-#elif defined(__GNUC__)
+#define CLANG 0
+#elif defined(__clang__)
 #define MSVC 0
-#define GNUC 1
+#define CLANG 1
 #else
 #error "Unsupported compiler!"
 #endif
@@ -23,7 +23,7 @@
 #include <math.h>
 #if MSVC
 #include <intrin.h>
-#elif GNUC
+#elif CLANG
 #include <x86intrin.h>
 #endif
 
@@ -163,7 +163,7 @@ BitScanReverse(u32 Value)
 #if MSVC
 	Result.IsFound = _BitScanReverse((unsigned long *)&Result.Index, Value);
 #else
-	for (u32 Test = 31; Test >= 0; Test++) {
+	for (s32 Test = 31; Test >= 0; Test++) {
 		if (Value & (1 << Test)) {
 			Result.IsFound = true;
 			Result.Index = Test;
@@ -320,7 +320,7 @@ SwapEndianU16(u16 *Value)
 #if MSVC
 inline void CompletePastWritesBeforeFutureWrites(void) {_WriteBarrier(); _mm_sfence();}
 inline void CompletePastReadsBeforeFutureReads(void) {_ReadBarrier(); _mm_lfence();}
-#elif GNUC
+#elif CLANG
 inline void CompletePastWritesBeforeFutureWrites(void) {__sync_synchronize();}
 inline void CompletePastReadsBeforeFutureReads(void) {__sync_synchronize();}
 #else
@@ -336,7 +336,7 @@ inline u32 AtomicDecrementU32(volatile u32 *val) {return _InterlockedDecrement((
 inline u64 AtomicDecrementU64(volatile u64 *val) {return _InterlockedDecrement64((volatile __int64 *)val);}
 inline u32 AtomicCompareExchangeU32(volatile u32 *val, u32 _new, u32 expected) {return _InterlockedCompareExchange((volatile long *)val, _new, expected);}
 inline u64 AtomicCompareExchangeU64(volatile u64 *val, u64 _new, u64 expected) {return _InterlockedCompareExchange64((volatile __int64 *)val, _new, expected);}
-#elif GNUC
+#elif CLANG
 inline u32 AtomicIncrementU32(volatile u32 *val) {return __sync_fetch_and_add(val, 1);}
 inline u64 AtomicIncrementU64(volatile u64 *val) {return __sync_fetch_and_add(val, 1);}
 inline u32 AtomicDecrementU32(volatile u32 *val) {return __sync_fetch_and_sub(val, 1);}
@@ -355,7 +355,7 @@ inline u64 AtomicCompareExchangeU64(volatile u64 *val, u64 _new, u64 expected) {
 // NOTE(ivan): Yield processor, give its time to other threads.
 #if MSVC
 inline void YieldProcessor(void) {_mm_pause();}
-#elif GNUC
+#elif CLANG
 inline void YieldProcessor(void) {_mm_pause();}
 #else
 inline void YieldProcessor(void) {NotImplemented();}

@@ -6,7 +6,7 @@ rem  This build script is temporarily hardcoded and configured to build a win32-
 rem  In a future we should rewrite it so it can be executed with parameters like target cpu architecture, internal/public build, etc...
 rem ---------------------------------------------------------------------------------------------------------------------------------------------
 
-rem General project name, must not contain spaces and deprecated symbols, no extension
+rem General project name, must not contain spaces and deprecated symbols, no extension.
 rem In a nutshell, the target game executable will be named as %OutputName%.exe,
 rem the target game entities will be named as %OutputName%_ents.dll,
 rem and the editor's dll is gonna be %OutputName%_editor.dll.
