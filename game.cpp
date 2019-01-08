@@ -188,6 +188,8 @@ UpdateGame(platform_state *PlatformState,
 	static char EntitiesFileName[1024] = {};
 	static char EntitiesTempFileName[1024] = {};
 	static char EntitiesLockFileName[1024] = {};
+
+	static image TestImage = {};
 	
 	switch (State->Type) {
 		///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -217,17 +219,21 @@ UpdateGame(platform_state *PlatformState,
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 
 		// NOTE(ivan): Load entities.
-		snprintf(EntitiesFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.dll", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
+		snprintf(EntitiesFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents" DLL_EXTENSION, PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
 		snprintf(EntitiesTempFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.tmp", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
 		snprintf(EntitiesLockFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.lck", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
 		PlatformAPI->ReloadEntitiesModule(PlatformState, EntitiesFileName, EntitiesTempFileName, EntitiesLockFileName, &GameAPI);
+
+		TestImage = LoadBMP(PlatformState,
+							PlatformAPI,
+							"data/hhtest.bmp");
 	} break;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game frame.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Frame: {
-#if INTERNAL		
+#if INTERNAL
 		// NOTE(ivan): Reload entities if necessary.
 		if (PlatformAPI->ShouldEntitiesModuleBeReloaded(PlatformState, EntitiesFileName))
 			PlatformAPI->ReloadEntitiesModule(PlatformState, EntitiesFileName, EntitiesTempFileName, EntitiesLockFileName, &GameAPI);
@@ -253,17 +259,22 @@ UpdateGame(platform_state *PlatformState,
 					  MakeV2((f32)(SurfaceBuffer->Width - 1), (f32)(SurfaceBuffer->Height - 1)),
 					  MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 
+		PushDrawGroupImage(PrimaryDrawGroup, MakeV2(20.0f, 20.0f), &TestImage);
+		
 		// NOTE(ivan): Present draw group to the surface buffer.
 		DrawGroup(PrimaryDrawGroup, SurfaceBuffer);
 
 		// NOTE(ivan): Free per-frame stack.
 		FreeMemoryStack(PlatformAPI, &State->FrameStack);
+		
 	} break;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game release.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Release: {
+		FreeImage(PlatformAPI, &TestImage);
+		
 		// NOTE(ivan): Save configuration.
 		SaveConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 		FreeConfiguration(PlatformAPI, &State->Config);

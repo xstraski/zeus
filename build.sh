@@ -11,7 +11,7 @@
 OutputName="zdemo"
 
 # Common compiler flags for all projects:
-CommonCompilerFlags="-Os -g -std=c++11 -msse4.1 -Wno-null-dereference -Wno-unused-value -DINTERNAL=1 -DSLOWCODE=1 -DLINUX=1"
+CommonCompilerFlags="-g -std=c++11 -DINTERNAL=1 -DSLOWCODE=1 -DLINUX=1"
 
 # Stop at errors.
 set -e
@@ -20,9 +20,9 @@ set -e
 mkdir -p build
 
 # Compile 'game'.
-clang++ $CommonCompilerFlags "game.cpp" -o ./build/$OutputName -lm -lpthread -ldl -lX11 -lXext
+g++ $CommonCompilerFlags "game.cpp" -o ./build/$OutputName -lm -lpthread -ldl -lX11 -lXext
 
 # Compile 'ents'.
 OutputEntsName=$OutputName
 OutputEntsName+="_ents.so"
-clang++ $CommonCompilerFlags "ents.cpp" -o ./build/$OutputEntsName -shared
+g++ $CommonCompilerFlags "ents.cpp" -o ./build/$OutputEntsName -shared -fPIC

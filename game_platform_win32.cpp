@@ -951,12 +951,13 @@ WinMain(HINSTANCE Instance,
 	strncpy(PlatformState.ExePath, ModuleName, PastLastSlash - ModuleName);
 
 	strcpy(PlatformState.ExeNameNoExt, PlatformState.ExeName);
-	char *LastDot = PlatformState.ExeNameNoExt;
+	char *LastDot = 0;
 	for (Ptr = PlatformState.ExeNameNoExt; *Ptr; Ptr++) {
 		if (*Ptr == '.')
 			LastDot = Ptr;
 	}
-	*LastDot = 0;
+	if (LastDot)
+		*LastDot = 0;
 
 	// NOTE(ivan): Query performance frequency.
 	LARGE_INTEGER PerformanceFrequency;
@@ -1058,11 +1059,8 @@ WinMain(HINSTANCE Instance,
 	PlatformState.XInput = Win32LoadXInput(&PlatformState);
 
 	// NOTE(ivan): Initialize game state structure.
-	game_state *State = (game_state *)Win32AllocateMemory(sizeof(game_state));
-	if (!State)
-		Win32Error(&PlatformState, "Failed allocating game state!");
-	memset(State, 0, sizeof(game_state)); // NOTE(ivan): Game state MUST be zeroed.
-	State->Type = GameStateType_Prepare;
+	game_state State = {};
+	State.Type = GameStateType_Prepare;
 
 	// NOTE(ivan): Show main window after all initialization is done.
 	ShowWindow(PlatformState.MainWindow, PlatformState.ShowCommand);
@@ -1209,7 +1207,7 @@ WinMain(HINSTANCE Instance,
 				   &Clocks,
 				   &SurfaceBuffer,
 				   &Input,
-				   State);
+				   &State);
 
 		// NOTE(ivan): Display offscreen graphics buffer.
 		Win32DisplaySurfaceBuffer(&PlatformState.SurfaceBuffer,
@@ -1237,7 +1235,7 @@ WinMain(HINSTANCE Instance,
 		Clocks.SecondsPerFrame = Win32GetSecondsElapsed(LastCycleCounter, EndCycleCounter, PlatformState.PerformanceFrequency);
 		LastCycleCounter = EndCycleCounter;
 
-		f64 SecondsElapsed = Win32GetSecondsElapsed(LastFPSCounter, EndFPSCounter, PlatformState.PerformanceFrequency);
+		f32 SecondsElapsed = Win32GetSecondsElapsed(LastFPSCounter, EndFPSCounter, PlatformState.PerformanceFrequency);
 		if (SecondsElapsed >= 1.0) {
 			LastFPSCounter = EndFPSCounter;
 			Clocks.FramesPerSecond = NumFrames;
@@ -1247,17 +1245,17 @@ WinMain(HINSTANCE Instance,
 		}
 
 		// NOTE(ivan): Now next frame won't be the first one again!
-		State->Type = GameStateType_Frame;
+		State.Type = GameStateType_Frame;
 	}
 
 	// NOTE(ivan): Game uninitialization.
-	State->Type = GameStateType_Release;
+	State.Type = GameStateType_Release;
 	UpdateGame(&PlatformState,
 			   &PlatformAPI,
 			   0,
 			   0,
 			   0,
-			   State);
+			   &State);
 
 	// NOTE(ivan): Release entities module.
 	if (PlatformState.EntitiesLibrary) {

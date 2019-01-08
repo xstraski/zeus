@@ -11,6 +11,7 @@
 #include <sys/shm.h>
 #include <time.h>
 #include <fcntl.h>
+#include <dirent.h>
 #include <dlfcn.h>
 
 // POSIX threads includes.
@@ -21,6 +22,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xos.h>
 #include <X11/Xutil.h>
+#include <X11/keysym.h>
 #include <X11/extensions/XShm.h>
 
 // NOTE(ivan): Work queue entry structure.
@@ -47,17 +49,91 @@ struct work_queue {
 	work_queue_entry Entries[256];
 };
 
+inline struct timespec
+LinuxGetClock(void)
+{
+	struct timespec Clock;
+	clock_gettime(CLOCK_MONOTONIC, &Clock);
+	return Clock;
+}
+
+inline f32
+LinuxGetSecondsElapsed(struct timespec Start, struct timespec End)
+{
+	return ((f32)(End.tv_sec - Start.tv_sec) + ((f32)(End.tv_nsec - Start.tv_nsec) * 1e-9f));
+}
+
+// NOTE(ivan): X11 window client geoemtry.
+struct linux_window_client_dimension {
+	s32 Width;
+	s32 Height;
+};
+
+inline linux_window_client_dimension
+LinuxGetWindowClientDimension(Display *XDisplay,
+							  Window Wind)
+{
+	linux_window_client_dimension Result;
+
+	Window RootWindow;
+	int WindowX, WindowY;
+	unsigned int WindowWidth, WindowHeight;
+	unsigned int WindowBorder, WindowDepth;
+	XGetGeometry(XDisplay,
+				 Wind,
+				 &RootWindow,
+				 &WindowX, &WindowY,
+				 &WindowWidth, &WindowHeight,
+				 &WindowBorder, &WindowDepth);
+
+	Result.Width = WindowWidth;
+	Result.Height = WindowHeight;
+
+	return Result;
+}
+
+// NOTE(ivan): Linux surface buffer.
+struct linux_surface_buffer {
+	XImage *Image;
+	XShmSegmentInfo SegmentInfo;
+
+	void *Pixels;
+	s32 Width;
+	s32 Height;
+	s32 BytesPerPixel;
+	s32 Pitch;
+};
+
 // NOTE(ivan): Linux layer state structure.
 struct platform_state {
 	s32 NumParams;
 	char **Params;
 
+	b32 Running;
+
+	char ExeName[1024];
+	char ExeNameNoExt[1024];
+	char ExePath[1024];
+
+	work_queue HighPriorityWorkQueue;
+	work_queue LowPriorityWorkQueue;
+
 	// NOTE(ivan): X server stuff.
 	Display *XDisplay;
+	int XScreen;
+	int XDepth;
+	Window XRootWindow;
+	Visual *XVisual;
+	Atom WMDeleteWindow;
+	
+	Window MainWindow;
+	GC MainWindowGC;
 
 	// NOTE(ivan): Game entities module information.
 	void * EntitiesLibrary;
 	ino_t EntitiesLibraryLastId;
+
+	linux_surface_buffer SurfaceBuffer;
 };
 
 PLATFORM_CHECK_PARAM(LinuxCheckParam);

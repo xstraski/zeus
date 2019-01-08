@@ -4,6 +4,12 @@
 
 #include "ents.h"
 
+// NOTE(ivan): Default values of main window geometry.
+#define DEF_WINDOW_X 20
+#define DEF_WINDOW_Y 20
+#define DEF_WINDOW_WIDTH 1024
+#define DEF_WINDOW_HEIGHT 768
+
 PLATFORM_CHECK_PARAM(LinuxCheckParam)
 {
 	Assert(PlatformState);
@@ -273,45 +279,33 @@ LinuxCopyFile(const char *FileName, const char *NewName)
 	Assert(FileName);
 	Assert(NewName);
 
-	int FileTo;
-	int FileFrom;
-	off_t Size64;
-	u32 Size;
-	u8 *Buffer;
-	ssize_t NumRead;
-	ssize_t NumWritten;
+	int FromFile = open(FileName, O_RDONLY);
+	if (FromFile != -1) {
+		off_t Size64 = lseek(FromFile, 0, SEEK_END);
+		lseek(FromFile, 0, SEEK_SET);
+		u32 Size = SafeTruncateU64(Size64);
+		if (Size) {
+			void *Buffer = LinuxAllocateMemory(Size);
+			if (Buffer) {
+				ssize_t NumRead = read(FromFile, Buffer, Size);
+				if (NumRead == Size) {
+					int ToFile = open(NewName, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+					if (ToFile != -1) {
+						ssize_t NumWritten = write(ToFile, Buffer, Size);
+						if (NumWritten == Size) {
+							// NOTE(ivan): Success.
+						}
+						
+						close(ToFile);
+					}
+				}
+				
+				LinuxDeallocateMemory(Buffer);
+			}
+		}
 
-	FileFrom = open(FileName, O_RDONLY);
-	if (FileFrom == -1)
-		goto OutError;
-
-	FileTo = open(NewName, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-	if (FileTo == -1)
-		goto OutError;
-
-	Size64 = lseek(FileFrom, 0, SEEK_END);
-	lseek(FileFrom, 0, SEEK_SET);
-	Size = SafeTruncateU64(Size64);
-
-	Buffer = (u8 *)LinuxAllocateMemory(Size);
-	if (!Buffer)
-		goto OutError;
-
-	NumRead = read(FileFrom, Buffer, Size);
-	if (NumRead != Size)
-		goto OutError;
-
-	NumWritten = write(FileTo, Buffer, NumRead);
-	if (NumWritten != NumRead)
-		goto OutError;
-
- OutError:
-	if (Buffer)
-		LinuxDeallocateMemory(Buffer);
-	if (FileTo != -1)
-		close(FileTo);
-	if (FileFrom != -1)
-		close(FileFrom);
+		close(FromFile);
+	}
 }
 
 PLATFORM_RELOAD_ENTITIES_MODULE(LinuxReloadEntitiesModule)
@@ -359,14 +353,151 @@ PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(LinuxShouldEntitiesModuleBeReloaded)
 	return false;
 }
 
+static void
+LinuxResizeSurfaceBuffer(platform_state *PlatformState,
+						 linux_surface_buffer *Buffer,
+						 s32 NewWidth, s32 NewHeight)
+{
+	Assert(PlatformState);
+	Assert(Buffer);
+
+	if (Buffer->Image) {
+		XShmDetach(PlatformState->XDisplay,
+				   &Buffer->SegmentInfo);
+		XDestroyImage(Buffer->Image);
+		shmdt(Buffer->SegmentInfo.shmaddr);
+		shmctl(Buffer->SegmentInfo.shmid, IPC_RMID, 0);
+
+		LinuxDeallocateMemory(Buffer->Pixels);
+		
+		Buffer->Image = 0;
+		Buffer->Pixels = 0;
+	}
+
+	static const s32 BytesPerPixel = 4; // NOTE(ivan): Hardcoded 32-bit color.
+
+	if ((NewWidth * NewHeight) != 0) {
+		Buffer->Image = XShmCreateImage(PlatformState->XDisplay,
+										PlatformState->XVisual,
+										PlatformState->XDepth,
+										ZPixmap,
+										0,
+										&Buffer->SegmentInfo,
+										NewWidth, NewHeight);
+		Buffer->SegmentInfo.shmid = shmget(IPC_PRIVATE,
+										   Buffer->Image->bytes_per_line * Buffer->Image->height,
+										   IPC_CREAT | 0777);
+		Buffer->SegmentInfo.shmaddr = Buffer->Image->data = (char *)shmat(Buffer->SegmentInfo.shmid,
+																		  0, 0);
+		Buffer->SegmentInfo.readOnly = False;
+		
+		XShmAttach(PlatformState->XDisplay,
+				   &Buffer->SegmentInfo);
+
+		Buffer->Pixels = LinuxAllocateMemory(NewWidth * NewHeight * BytesPerPixel);
+		LinuxLog(PlatformState, "Surface buffer (%dx%d) created.", NewWidth, NewHeight);
+	}
+	
+	Buffer->Width = NewWidth;
+	Buffer->Height = NewHeight;
+	Buffer->BytesPerPixel = BytesPerPixel;
+	Buffer->Pitch = BytesPerPixel * NewWidth;
+}
+
+static void
+LinuxDisplaySurfaceBuffer(platform_state *PlatformState,
+						  linux_surface_buffer *Buffer,
+						  Window TargetWindow, GC TargetWindowGC)
+{
+	Assert(PlatformState);
+	Assert(Buffer);
+
+	if (!Buffer->Pixels)
+		return;
+
+	memcpy(Buffer->Image->data, Buffer->Pixels, Buffer->Width * Buffer->Height * Buffer->BytesPerPixel);
+	XShmPutImage(PlatformState->XDisplay,
+				 TargetWindow,
+				 TargetWindowGC,
+				 Buffer->Image,
+				 0, 0, 0, 0,
+				 Buffer->Width, Buffer->Height,
+				 False);
+}
+
 int
 main(int NumParams, char **Params)
 {
 	platform_state PlatformState = {};
+	PlatformState.Running = true;
 	
 	PlatformState.NumParams = NumParams;
 	PlatformState.Params = Params;
 
+	// NOTE(ivan): Check if already running.
+	// TODO(ivan): Implement the check!
+
+	// NOTE(ivan): Obtain executable's file name and path.
+	char ModuleName[2048] = {};
+	Verify(readlink("/proc/self/exe", ModuleName, CountOf(ModuleName) - 1) != -1);
+
+	char *PastLastSlash = ModuleName, *Ptr = ModuleName;
+	while (*Ptr) {
+		if (*Ptr == '/') // NOTE(ivan): readlink("/proc/self/exe") always returns path with NIX path separators.
+			PastLastSlash = Ptr + 1;
+		Ptr++;
+	}
+	strncpy(PlatformState.ExeName, PastLastSlash, CountOf(PlatformState.ExeName) - 1);
+	strncpy(PlatformState.ExePath, ModuleName, PastLastSlash - ModuleName);
+
+	strcpy(PlatformState.ExeNameNoExt, PlatformState.ExeName);
+	char *LastDot = 0;
+	for (Ptr = PlatformState.ExeNameNoExt; *Ptr; Ptr++) {
+		if (*Ptr == '.')
+			LastDot = Ptr;
+	}
+	if (LastDot)
+		*LastDot = 0;
+
+	// NOTE(ivan): Change current directory if requested.
+	const char *WorkDir = LinuxCheckParamValue(&PlatformState, "-cwd");
+	if (WorkDir)
+		chdir(WorkDir);
+
+	// NOTE(ivan): Initialize log file.
+	// TODO(ivan): Implement the log!
+
+	// NOTE(ivan): Initialize work queues for multithreading.
+	LinuxInitializeWorkQueue(&PlatformState, &PlatformState.HighPriorityWorkQueue, 6);
+	LinuxInitializeWorkQueue(&PlatformState, &PlatformState.LowPriorityWorkQueue, 2);
+
+	// NOTE(ivan): Initialize platform API structure.
+	platform_api PlatformAPI = {};
+	PlatformAPI.CheckParamValue = LinuxCheckParamValue;
+	PlatformAPI.CheckParam = LinuxCheckParam;
+	PlatformAPI.Log = LinuxLog;
+	PlatformAPI.Error = LinuxError;
+	PlatformAPI.AllocateMemory = LinuxAllocateMemory;
+	PlatformAPI.DeallocateMemory = LinuxDeallocateMemory;
+	PlatformAPI.GetMemoryStats = LinuxGetMemoryStats;
+	PlatformAPI.AddWorkQueueEntry = LinuxAddWorkQueueEntry;
+	PlatformAPI.CompleteWorkQueue = LinuxCompleteWorkQueue;
+	PlatformAPI.ReadEntireFile = LinuxReadEntireFile;
+	PlatformAPI.FreeEntireFileMemory = LinuxFreeEntireFileMemory;
+	PlatformAPI.WriteEntireFile = LinuxWriteEntireFile;
+	PlatformAPI.ReloadEntitiesModule = LinuxReloadEntitiesModule;
+	PlatformAPI.ShouldEntitiesModuleBeReloaded = LinuxShouldEntitiesModuleBeReloaded;
+
+	PlatformAPI.HighPriorityWorkQueue = &PlatformState.HighPriorityWorkQueue;
+	PlatformAPI.LowPriorityWorkQueue = &PlatformState.LowPriorityWorkQueue;
+
+	PlatformAPI.ExePath = PlatformState.ExePath;
+	PlatformAPI.ExeName = PlatformState.ExeName;
+	PlatformAPI.ExeNameNoExt = PlatformState.ExeNameNoExt;
+
+	// NOTE(ivan): Initialize input structure for future use.
+	game_input Input = {};
+	
 	// NOTE(ivan): Connect to X server.
 	PlatformState.XDisplay = XOpenDisplay(getenv("DISPLAY"));
 	if (!PlatformState.XDisplay) {
@@ -375,10 +506,199 @@ main(int NumParams, char **Params)
 		else
 			LinuxError(&PlatformState, "Cannot connect to X display!");
 	}
+	PlatformState.XScreen = DefaultScreen(PlatformState.XDisplay);
+	PlatformState.XDepth = DefaultDepth(PlatformState.XDisplay,
+										PlatformState.XScreen);
+	PlatformState.XRootWindow = RootWindow(PlatformState.XDisplay,
+										   PlatformState.XScreen);
+	PlatformState.XVisual = DefaultVisual(PlatformState.XDisplay,
+										  PlatformState.XScreen);
+
+	// NOTE(ivan): Check X11 MIT-SHM support.
+	s32 ShmMajor, ShmMinor;
+	Bool ShmPixmaps;
+	if (XShmQueryVersion(PlatformState.XDisplay,
+						 &ShmMajor, &ShmMinor,
+						 &ShmPixmaps))
+		LinuxLog(&PlatformState, "X11 MIT-SHM extension version %d.%d.", ShmMajor, ShmMinor);
+	else
+		LinuxError(&PlatformState, "X11 MIT-SHM extension missing!");
+
+	// NOTE(ivan): Create main window and its GC.
+	XSetWindowAttributes WindowAttr;
+	WindowAttr.background_pixel = BlackPixel(PlatformState.XDisplay, PlatformState.XScreen);
+	WindowAttr.border_pixel = BlackPixel(PlatformState.XDisplay, PlatformState.XScreen);
+	WindowAttr.event_mask = StructureNotifyMask | ExposureMask;
+
+	PlatformState.MainWindow = XCreateWindow(PlatformState.XDisplay,
+											 PlatformState.XRootWindow,
+											 DEF_WINDOW_X, DEF_WINDOW_Y,
+											 DEF_WINDOW_WIDTH, DEF_WINDOW_HEIGHT,
+											 5,
+											 PlatformState.XDepth,
+											 InputOutput,
+											 PlatformState.XVisual,
+											 CWBackPixel | CWBorderPixel | CWEventMask,
+											 &WindowAttr);
+
+	XSizeHints SizeHint;
+	SizeHint.x = DEF_WINDOW_X;
+	SizeHint.y = DEF_WINDOW_Y;
+	SizeHint.width = DEF_WINDOW_WIDTH;
+	SizeHint.height = DEF_WINDOW_HEIGHT;
+	SizeHint.flags = PPosition | PSize;
+	XSetStandardProperties(PlatformState.XDisplay,
+						   PlatformState.MainWindow,
+						   GAMENAME,
+						   0, None,
+						   Params, NumParams,
+						   &SizeHint);
+
+	XWMHints WMHint;
+	WMHint.input = True;
+	WMHint.flags = InputHint;
+	XSetWMHints(PlatformState.XDisplay,
+				PlatformState.MainWindow,
+				&WMHint);
+
+	PlatformState.WMDeleteWindow = XInternAtom(PlatformState.XDisplay,
+											   "WM_DELETE_WINDOW",
+											   False);
+	XSetWMProtocols(PlatformState.XDisplay,
+					PlatformState.MainWindow,
+					&PlatformState.WMDeleteWindow,
+					1);
+
+	PlatformState.MainWindowGC = XCreateGC(PlatformState.XDisplay,
+										   PlatformState.MainWindow,
+										   0, 0);
+
+	// NOTE(ivan): Force surface buffer generation to avoid 'Segmentation fault'.
+	linux_window_client_dimension WindowDim = LinuxGetWindowClientDimension(PlatformState.XDisplay,
+																			PlatformState.MainWindow);
+	LinuxResizeSurfaceBuffer(&PlatformState,
+							 &PlatformState.SurfaceBuffer,
+							 WindowDim.Width,
+							 WindowDim.Height);
+
+	// NOTE(ivan): Initialize game state structure.
+	game_state State = {};
+	State.Type = GameStateType_Prepare;
+	
+	// NOTE(ivan): Present main window after all initialization is done.
+	XMapRaised(PlatformState.XDisplay,
+			   PlatformState.MainWindow);
+	XFlush(PlatformState.XDisplay);
+
+	// NOTE(ivan): Prepare timings.
+	game_clocks Clocks = {};
+
+	struct timespec LastCycleCounter = LinuxGetClock();
+	struct timespec LastFPSCounter = LinuxGetClock();
+	u32 NumFrames = 0;
+
+	// NOTE(ivan): Primary cycle;
+	while (PlatformState.Running) {
+		// NOTE(ivan): Reset keyboard half-transition counters.
+		for (u32 ButtonIndex = 0; ButtonIndex < CountOf(Input.KeyboardButtons); ButtonIndex++)
+			Input.KeyboardButtons[ButtonIndex].HalfTransitionCount = 0;
+		
+		// NOTE(ivan): Process X11 messages.
+		XEvent Event;
+		while (XPending(PlatformState.XDisplay)) {
+			XNextEvent(PlatformState.XDisplay,
+					   &Event);
+			if (Event.xany.window == PlatformState.MainWindow) {
+				switch(Event.type) {
+				case ClientMessage: {
+					if (Event.xclient.data.l[0] == PlatformState.WMDeleteWindow)
+						PlatformState.Running = false;
+				} break;
+					
+				case ConfigureNotify: { // TODO(ivan): Dont regenerate surface buffer when the window moves.
+					linux_window_client_dimension WindowDim = LinuxGetWindowClientDimension(PlatformState.XDisplay,
+																							PlatformState.MainWindow);
+					LinuxResizeSurfaceBuffer(&PlatformState,
+											 &PlatformState.SurfaceBuffer,
+											 WindowDim.Width,
+											 WindowDim.Height);
+				} break;
+				}
+			}
+		}
+
+		// NOTE(ivan): Prepare offscreen graphics buffer.
+		game_surface_buffer SurfaceBuffer;
+		SurfaceBuffer.Pixels = PlatformState.SurfaceBuffer.Pixels;
+		SurfaceBuffer.Width = PlatformState.SurfaceBuffer.Width;
+		SurfaceBuffer.Height = PlatformState.SurfaceBuffer.Height;
+		SurfaceBuffer.BytesPerPixel = PlatformState.SurfaceBuffer.BytesPerPixel;
+		SurfaceBuffer.Pitch = PlatformState.SurfaceBuffer.Pitch;
+
+		// NOTE(ivan): Game update.
+		UpdateGame(&PlatformState,
+				   &PlatformAPI,
+				   &Clocks,
+				   &SurfaceBuffer,
+				   &Input,
+				   &State);
+
+		// NOTE(ivan): Display offscreen graphics buffer.
+		LinuxDisplaySurfaceBuffer(&PlatformState,
+								  &PlatformState.SurfaceBuffer,
+								  PlatformState.MainWindow,
+								  PlatformState.MainWindowGC);
+
+		// NOTE(ivan): Make keyboard input data obsolete for next frame.
+		for (u32 ButtonIndex = 0; ButtonIndex < CountOf(Input.KeyboardButtons); ButtonIndex++)
+			Input.KeyboardButtons[ButtonIndex].IsActual = false;
+
+		// NOTE(ivan): Quit if requested.
+		if (PlatformAPI.QuitRequested)
+			PlatformState.Running = false;
+
+		// NOTE(ivan): Finish timings.
+		struct timespec EndCycleCounter = LinuxGetClock();
+		struct timespec EndFPSCounter = LinuxGetClock();
+
+		Clocks.SecondsPerFrame = LinuxGetSecondsElapsed(LastCycleCounter, EndCycleCounter);
+		LastCycleCounter = EndCycleCounter;
+
+		f32 SecondsElapsed = LinuxGetSecondsElapsed(LastFPSCounter, EndFPSCounter);
+		if (SecondsElapsed >= 1.0) {
+			LastFPSCounter = EndFPSCounter;
+			Clocks.FramesPerSecond = NumFrames;
+			NumFrames = 0;
+		} else {
+			NumFrames++;
+		}
+
+		// NOTE(ivan): Now next frame won't be the first one again!
+		State.Type = GameStateType_Frame;
+	};
+
+	// NOTE(ivan): Game uninitialization.
+	State.Type = GameStateType_Release;
+	UpdateGame(&PlatformState,
+			   &PlatformAPI,
+			   0,
+			   0,
+			   0,
+			   &State);
+
+	// NOTE(ivan): Destroy surface buffer.
+	LinuxResizeSurfaceBuffer(&PlatformState,
+							 &PlatformState.SurfaceBuffer,
+							 0, 0);
+
+	// NOTE(ivan): Destroy main window and its GC.
+	XFreeGC(PlatformState.XDisplay,
+			PlatformState.MainWindowGC);
+	XDestroyWindow(PlatformState.XDisplay,
+				   PlatformState.MainWindow);
 
 	// NOTE(ivan): Disconnect from X server.
-	if (PlatformState.XDisplay)
-		XCloseDisplay(PlatformState.XDisplay);
+	XCloseDisplay(PlatformState.XDisplay);
 	
 	return 0;
 }
