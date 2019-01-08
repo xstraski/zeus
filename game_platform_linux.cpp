@@ -513,6 +513,10 @@ main(int NumParams, char **Params)
 										   PlatformState.XScreen);
 	PlatformState.XVisual = DefaultVisual(PlatformState.XDisplay,
 										  PlatformState.XScreen);
+	PlatformState.XBlack = BlackPixel(PlatformState.XDisplay,
+									  PlatformState.XScreen);
+	PlatformState.XWhite = WhitePixel(PlatformState.XDisplay,
+									  PlatformState.XScreen);
 
 	// NOTE(ivan): Check X11 MIT-SHM support.
 	s32 ShmMajor, ShmMinor;
@@ -526,9 +530,9 @@ main(int NumParams, char **Params)
 
 	// NOTE(ivan): Create main window and its GC.
 	XSetWindowAttributes WindowAttr;
-	WindowAttr.background_pixel = BlackPixel(PlatformState.XDisplay, PlatformState.XScreen);
-	WindowAttr.border_pixel = BlackPixel(PlatformState.XDisplay, PlatformState.XScreen);
-	WindowAttr.event_mask = StructureNotifyMask | ExposureMask;
+	WindowAttr.background_pixel = PlatformState.XBlack;
+	WindowAttr.border_pixel = PlatformState.XBlack;
+	WindowAttr.event_mask = StructureNotifyMask | ExposureMask | KeyPressMask | ButtonPressMask;
 
 	PlatformState.MainWindow = XCreateWindow(PlatformState.XDisplay,
 											 PlatformState.XRootWindow,
@@ -572,6 +576,12 @@ main(int NumParams, char **Params)
 	PlatformState.MainWindowGC = XCreateGC(PlatformState.XDisplay,
 										   PlatformState.MainWindow,
 										   0, 0);
+	XSetBackground(PlatformState.XDisplay,
+				   PlatformState.MainWindowGC,
+				   PlatformState.XBlack);
+	XSetForeground(PlatformState.XDisplay,
+				   PlatformState.MainWindowGC,
+				   PlatformState.XWhite);
 
 	// NOTE(ivan): Force surface buffer generation to avoid 'Segmentation fault'.
 	linux_window_client_dimension WindowDim = LinuxGetWindowClientDimension(PlatformState.XDisplay,
@@ -615,13 +625,19 @@ main(int NumParams, char **Params)
 						PlatformState.Running = false;
 				} break;
 					
-				case ConfigureNotify: { // TODO(ivan): Dont regenerate surface buffer when the window moves.
+				case ConfigureNotify: { // TODO(ivan): Don't regenerate surface buffer when the window moves.
 					linux_window_client_dimension WindowDim = LinuxGetWindowClientDimension(PlatformState.XDisplay,
 																							PlatformState.MainWindow);
 					LinuxResizeSurfaceBuffer(&PlatformState,
 											 &PlatformState.SurfaceBuffer,
 											 WindowDim.Width,
 											 WindowDim.Height);
+				} break;
+
+				case KeyPress: {
+				} break;
+
+				case ButtonPress: {
 				} break;
 				}
 			}

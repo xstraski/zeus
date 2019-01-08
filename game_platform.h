@@ -261,9 +261,9 @@ struct platform_api {
 	work_queue *LowPriorityWorkQueue;
 
 	// NOTE(ivan): Executable information.
-	char *ExePath;
-	char *ExeName;
-	char *ExeNameNoExt;
+	const char *ExePath;
+	const char *ExeName;
+	const char *ExeNameNoExt;
 
 	b32 QuitRequested; // NOTE(ivan): Set this to true to request program exit.
 };

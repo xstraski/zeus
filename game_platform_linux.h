@@ -122,6 +122,8 @@ struct platform_state {
 	Display *XDisplay;
 	int XScreen;
 	int XDepth;
+	unsigned long XBlack;
+	unsigned long XWhite;
 	Window XRootWindow;
 	Visual *XVisual;
 	Atom WMDeleteWindow;
