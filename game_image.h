@@ -5,7 +5,7 @@
 
 // NOTE(ivan): Image structure.
 struct image {
-	void *Pixels;
+	void *Pixels; // NOTE(ivan): Format - 0xAARRGGBB.
 
 	s32 Width;
 	s32 Height;

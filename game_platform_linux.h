@@ -63,6 +63,11 @@ LinuxGetSecondsElapsed(struct timespec Start, struct timespec End)
 	return ((f32)(End.tv_sec - Start.tv_sec) + ((f32)(End.tv_nsec - Start.tv_nsec) * 1e-9f));
 }
 
+struct linux_input_key {
+	u16 Code;
+	s32 Value;
+};
+
 // NOTE(ivan): X11 window client geoemtry.
 struct linux_window_client_dimension {
 	s32 Width;
@@ -114,6 +119,8 @@ struct platform_state {
 	char ExeName[1024];
 	char ExeNameNoExt[1024];
 	char ExePath[1024];
+
+	int LogFile;
 
 	work_queue HighPriorityWorkQueue;
 	work_queue LowPriorityWorkQueue;

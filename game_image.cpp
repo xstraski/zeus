@@ -47,8 +47,8 @@ LoadBMP(platform_state *PlatformState,
 		bmp_header *Header = (bmp_header *)ReadPiece.Memory;
 
 		static const u8 BMPSignature[] = {0x42, 0x4D};
-		if (Header->FileType != *(u32 *)&BMPSignature)
-			PlatformAPI->Log(PlatformState, "BMP file '%s' has wrong signature!", FileName);
+		if (Header->FileType != *(u16 *)&BMPSignature)
+			PlatformAPI->Log(PlatformState, "BMP file '%s' has wrong signature (0x%x)!", FileName, Header->FileType);
 
 		if (Header->BitsPerPixel != 32) {
 			PlatformAPI->Log(PlatformState, "BMP file '%s' is not 32-bit, not supported.", FileName);

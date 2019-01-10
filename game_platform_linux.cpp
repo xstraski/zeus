@@ -54,6 +54,9 @@ PLATFORM_LOG(LinuxLog)
 	snprintf(FinalMessage, CountOf(FinalMessage), "%s\r\n", MessageBuffer);
 
 	printf("%s", FinalMessage);
+
+	if (PlatformState->LogFile != -1)
+		write(PlatformState->LogFile, FinalMessage, strlen(FinalMessage));
 	
 	LeaveTicketMutex(&LogMutex);
 #endif	
@@ -353,6 +356,21 @@ PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(LinuxShouldEntitiesModuleBeReloaded)
 	return false;
 }
 
+inline void
+LinuxProcessKeyboardOrMouseButton(game_input_button *Button,
+								  b32 IsDown)
+{
+	Assert(Button);
+
+	if (Button->WasDown != IsDown)
+		Button->HalfTransitionCount = 1;
+	else
+		Button->HalfTransitionCount = 0;	
+	Button->WasDown = Button->IsDown;
+	Button->IsDown = IsDown;
+	Button->IsActual = true;
+}
+
 static void
 LinuxResizeSurfaceBuffer(platform_state *PlatformState,
 						 linux_surface_buffer *Buffer,
@@ -465,7 +483,16 @@ main(int NumParams, char **Params)
 		chdir(WorkDir);
 
 	// NOTE(ivan): Initialize log file.
-	// TODO(ivan): Implement the log!
+#if INTERNAL
+	char LogName[1024] = {};
+	snprintf(LogName, CountOf(LogName) - 1, "%s.log", PlatformState.ExeNameNoExt);
+
+	PlatformState.LogFile = open(LogName, O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR);
+	if (PlatformState.LogFile != -1) {
+		u8 UnicodeBOM[] = {0xEF, 0xBB, 0xBF}; // NOTE(ivan): UTF-8.
+		write(PlatformState.LogFile, UnicodeBOM, sizeof(UnicodeBOM));
+	}
+#endif // #if INTERNAL	
 
 	// NOTE(ivan): Initialize work queues for multithreading.
 	LinuxInitializeWorkQueue(&PlatformState, &PlatformState.HighPriorityWorkQueue, 6);
@@ -497,7 +524,7 @@ main(int NumParams, char **Params)
 
 	// NOTE(ivan): Initialize input structure for future use.
 	game_input Input = {};
-	
+
 	// NOTE(ivan): Connect to X server.
 	PlatformState.XDisplay = XOpenDisplay(getenv("DISPLAY"));
 	if (!PlatformState.XDisplay) {
@@ -532,7 +559,7 @@ main(int NumParams, char **Params)
 	XSetWindowAttributes WindowAttr;
 	WindowAttr.background_pixel = PlatformState.XBlack;
 	WindowAttr.border_pixel = PlatformState.XBlack;
-	WindowAttr.event_mask = StructureNotifyMask | ExposureMask | KeyPressMask | ButtonPressMask;
+	WindowAttr.event_mask = StructureNotifyMask;
 
 	PlatformState.MainWindow = XCreateWindow(PlatformState.XDisplay,
 											 PlatformState.XRootWindow,
@@ -625,19 +652,16 @@ main(int NumParams, char **Params)
 						PlatformState.Running = false;
 				} break;
 					
-				case ConfigureNotify: { // TODO(ivan): Don't regenerate surface buffer when the window moves.
-					linux_window_client_dimension WindowDim = LinuxGetWindowClientDimension(PlatformState.XDisplay,
-																							PlatformState.MainWindow);
-					LinuxResizeSurfaceBuffer(&PlatformState,
-											 &PlatformState.SurfaceBuffer,
-											 WindowDim.Width,
-											 WindowDim.Height);
-				} break;
-
-				case KeyPress: {
-				} break;
-
-				case ButtonPress: {
+				case ConfigureNotify: {
+					if (Event.xconfigure.width != PlatformState.SurfaceBuffer.Width &&
+						Event.xconfigure.height != PlatformState.SurfaceBuffer.Height) {
+						linux_window_client_dimension WindowDim = LinuxGetWindowClientDimension(PlatformState.XDisplay,
+																								PlatformState.MainWindow);
+						LinuxResizeSurfaceBuffer(&PlatformState,
+												 &PlatformState.SurfaceBuffer,
+												 WindowDim.Width,
+												 WindowDim.Height);
+					}
 				} break;
 				}
 			}
@@ -715,6 +739,14 @@ main(int NumParams, char **Params)
 
 	// NOTE(ivan): Disconnect from X server.
 	XCloseDisplay(PlatformState.XDisplay);
+
+	// NOTE(ivan): Release work queues.
+	LinuxReleaseWorkQueue(&PlatformState.HighPriorityWorkQueue);
+	LinuxReleaseWorkQueue(&PlatformState.LowPriorityWorkQueue);
+
+	// NOTE(ivan): Release log file.
+	if (PlatformState.LogFile != -1)
+		close(PlatformState.LogFile);
 	
 	return 0;
 }
