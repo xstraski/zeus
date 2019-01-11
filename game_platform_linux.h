@@ -23,6 +23,9 @@
 #include <X11/Xos.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+
+// X11 extensions includes.
+#include <X11/XKBlib.h>
 #include <X11/extensions/XShm.h>
 
 // NOTE(ivan): Work queue entry structure.
@@ -138,6 +141,8 @@ struct platform_state {
 	Window MainWindow;
 	GC MainWindowGC;
 
+	b32 DebugCursor;
+	
 	// NOTE(ivan): Game entities module information.
 	void * EntitiesLibrary;
 	ino_t EntitiesLibraryLastId;

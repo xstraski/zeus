@@ -10,6 +10,11 @@
 #define DEF_WINDOW_WIDTH 1024
 #define DEF_WINDOW_HEIGHT 768
 
+// NOTE(ivan): For fullscreen toggling.
+#define _NET_WM_STATE_REMOVE 0
+#define _NET_WM_STATE_ADD 1
+#define _NET_WM_STATE_TOGGLE 2
+
 PLATFORM_CHECK_PARAM(LinuxCheckParam)
 {
 	Assert(PlatformState);
@@ -260,15 +265,13 @@ PLATFORM_WRITE_ENTIRE_FILE(LinuxWriteEntireFile)
 	Assert(Memory);
 	Assert(Bytes);
 
-	b32 Result = true;
+	b32 Result = false;
 	
 	int File = open(FileName, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
 	if (File != -1) {
 		ssize_t BytesWritten = write(File, Memory, Bytes);
 		if (fsync(File) >= 0)
 			Result = (BytesWritten == (ssize_t)Bytes);
-		else
-			Result = false;
 		
 		close(File);
 	}
@@ -276,12 +279,14 @@ PLATFORM_WRITE_ENTIRE_FILE(LinuxWriteEntireFile)
 	return Result;
 }
 
-static void
+static b32
 LinuxCopyFile(const char *FileName, const char *NewName)
 {
 	Assert(FileName);
 	Assert(NewName);
 
+	b32 Result = false;
+	
 	int FromFile = open(FileName, O_RDONLY);
 	if (FromFile != -1) {
 		off_t Size64 = lseek(FromFile, 0, SEEK_END);
@@ -296,7 +301,7 @@ LinuxCopyFile(const char *FileName, const char *NewName)
 					if (ToFile != -1) {
 						ssize_t NumWritten = write(ToFile, Buffer, Size);
 						if (NumWritten == Size) {
-							// NOTE(ivan): Success.
+							Result = true;
 						}
 						
 						close(ToFile);
@@ -309,6 +314,8 @@ LinuxCopyFile(const char *FileName, const char *NewName)
 
 		close(FromFile);
 	}
+
+	return Result;
 }
 
 PLATFORM_RELOAD_ENTITIES_MODULE(LinuxReloadEntitiesModule)
@@ -323,7 +330,8 @@ PLATFORM_RELOAD_ENTITIES_MODULE(LinuxReloadEntitiesModule)
 		PlatformState->EntitiesLibrary = 0;
 	}
 	
-	LinuxCopyFile(FileName, TempFileName);
+	if (!LinuxCopyFile(FileName, TempFileName))
+		LinuxError(PlatformState, "Failed copying entities module!");
 	
 	PlatformState->EntitiesLibrary = dlopen(TempFileName, RTLD_NOW);
 	if (!PlatformState->EntitiesLibrary)
@@ -369,6 +377,132 @@ LinuxProcessKeyboardOrMouseButton(game_input_button *Button,
 	Button->WasDown = Button->IsDown;
 	Button->IsDown = IsDown;
 	Button->IsActual = true;
+}
+
+static b32
+LinuxMapXKeySymToKeyCode(KeySym XKeySym, key_code *OutCode)
+{
+	Assert(OutCode);
+
+	key_code KeyCode;
+	b32 KeyFound = false;
+#define KeyMap(MapXKeyCode, MapKeyCode)				\
+	if (XKeySym == MapXKeyCode) {					\
+		KeyCode = MapKeyCode;						\
+		KeyFound = true;							\
+	}
+	KeyMap(XK_Return, KeyCode_Enter);
+	KeyMap(XK_Tab, KeyCode_Tab);
+	KeyMap(XK_Escape, KeyCode_Escape);
+	KeyMap(XK_KP_Space, KeyCode_Space);
+	KeyMap(XK_BackSpace, KeyCode_BackSpace);
+	KeyMap(XK_Shift_L, KeyCode_LeftShift);
+	KeyMap(XK_Shift_R, KeyCode_RightShift);
+	KeyMap(XK_Alt_L, KeyCode_LeftAlt);
+	KeyMap(XK_Alt_R, KeyCode_RightAlt);
+	KeyMap(XK_Control_L, KeyCode_LeftControl);
+	KeyMap(XK_Control_R, KeyCode_RightControl);
+	KeyMap(XK_Super_L, KeyCode_LeftSuper);
+	KeyMap(XK_Super_R, KeyCode_RightSuper);
+  	KeyMap(XK_Home, KeyCode_Home);
+	KeyMap(XK_End, KeyCode_End);
+	KeyMap(XK_Prior, KeyCode_PageUp);
+	KeyMap(XK_Next, KeyCode_PageDown);
+	KeyMap(XK_Insert, KeyCode_Insert);
+	KeyMap(XK_Delete, KeyCode_Delete);
+	KeyMap(XK_Up, KeyCode_Up);
+	KeyMap(XK_Down, KeyCode_Down);
+	KeyMap(XK_Left, KeyCode_Left);
+	KeyMap(XK_Right, KeyCode_Right);
+	KeyMap(XK_F1, KeyCode_F1);
+	KeyMap(XK_F2, KeyCode_F2);
+	KeyMap(XK_F3, KeyCode_F3);
+	KeyMap(XK_F4, KeyCode_F4);
+	KeyMap(XK_F5, KeyCode_F5);
+	KeyMap(XK_F6, KeyCode_F6);
+	KeyMap(XK_F7, KeyCode_F7);
+	KeyMap(XK_F8, KeyCode_F8);
+	KeyMap(XK_F9, KeyCode_F9);
+	KeyMap(XK_F10, KeyCode_F10);
+	KeyMap(XK_F11, KeyCode_F11);
+	KeyMap(XK_F12, KeyCode_F12);
+	
+	KeyMap(XK_Num_Lock, KeyCode_NumLock);
+	KeyMap(XK_Caps_Lock, KeyCode_CapsLock);
+	KeyMap(XK_Scroll_Lock, KeyCode_ScrollLock);
+	
+	KeyMap(XK_Print, KeyCode_PrintScreen);
+	KeyMap(XK_Pause, KeyCode_Pause);
+
+	KeyMap(XK_a, KeyCode_A);
+	KeyMap(XK_b, KeyCode_B);
+	KeyMap(XK_c, KeyCode_C);
+	KeyMap(XK_d, KeyCode_D);
+	KeyMap(XK_e, KeyCode_E);
+	KeyMap(XK_f, KeyCode_F);
+	KeyMap(XK_g, KeyCode_G);
+	KeyMap(XK_h, KeyCode_H);
+	KeyMap(XK_i, KeyCode_I);
+	KeyMap(XK_j, KeyCode_J);
+	KeyMap(XK_k, KeyCode_K);
+	KeyMap(XK_l, KeyCode_L);
+	KeyMap(XK_m, KeyCode_M);
+	KeyMap(XK_n, KeyCode_N);
+	KeyMap(XK_o, KeyCode_O);
+	KeyMap(XK_p, KeyCode_P);
+	KeyMap(XK_q, KeyCode_Q);
+	KeyMap(XK_r, KeyCode_R);
+	KeyMap(XK_s, KeyCode_S);
+	KeyMap(XK_t, KeyCode_T);
+	KeyMap(XK_u, KeyCode_U);
+	KeyMap(XK_v, KeyCode_V);
+	KeyMap(XK_w, KeyCode_W);
+	KeyMap(XK_x, KeyCode_X);
+	KeyMap(XK_y, KeyCode_Y);
+	KeyMap(XK_z, KeyCode_Z);
+
+	KeyMap(XK_0, KeyCode_0);
+	KeyMap(XK_1, KeyCode_1);
+	KeyMap(XK_2, KeyCode_2);
+	KeyMap(XK_3, KeyCode_3);
+	KeyMap(XK_4, KeyCode_4);
+	KeyMap(XK_5, KeyCode_5);
+	KeyMap(XK_6, KeyCode_6);
+	KeyMap(XK_7, KeyCode_7);
+	KeyMap(XK_8, KeyCode_8);
+	KeyMap(XK_9, KeyCode_9);
+
+	KeyMap(XK_bracketleft, KeyCode_OpenBracket);
+	KeyMap(XK_bracketright, KeyCode_CloseBracket);
+	KeyMap(XK_semicolon, KeyCode_Semicolon);
+	KeyMap(XK_quotedbl, KeyCode_Quote);
+	KeyMap(XK_comma, KeyCode_Comma);
+	KeyMap(XK_period, KeyCode_Period);
+	KeyMap(XK_slash, KeyCode_Slash);
+	KeyMap(XK_backslash, KeyCode_BackSlash);
+	KeyMap(XK_asciitilde, KeyCode_Tilde);
+	KeyMap(XK_plus, KeyCode_Plus);
+	KeyMap(XK_minus, KeyCode_Minus);
+
+	KeyMap(XK_KP_Up, KeyCode_NumUp);
+	KeyMap(XK_KP_Down, KeyCode_NumDown);
+	KeyMap(XK_KP_Left, KeyCode_NumLeft);
+	KeyMap(XK_KP_Right, KeyCode_NumRight);
+	KeyMap(XK_KP_Home, KeyCode_NumHome);
+	KeyMap(XK_KP_End, KeyCode_NumEnd);
+	KeyMap(XK_KP_Prior, KeyCode_NumPageUp);
+	KeyMap(XK_KP_Next, KeyCode_NumPageDown);
+	KeyMap(XK_KP_Multiply, KeyCode_NumMultiply);
+	KeyMap(XK_KP_Divide, KeyCode_NumDivide);
+	KeyMap(XK_KP_Add, KeyCode_NumPlus);
+	KeyMap(XK_KP_Subtract, KeyCode_NumMinus);
+	KeyMap(XK_KP_Separator, KeyCode_NumClear);
+#undef KeyMap	
+
+	if (!KeyFound)
+		return false;
+	*OutCode = KeyCode;
+	return true;
 }
 
 static void
@@ -443,6 +577,74 @@ LinuxDisplaySurfaceBuffer(platform_state *PlatformState,
 				 False);
 }
 
+static void
+LinuxToggleFullscreen(platform_state *PlatformState, Window Wnd)
+{
+	Assert(PlatformState);
+	Assert(Wnd);
+
+	static b32 IsFullscreen = false;
+	IsFullscreen = !IsFullscreen;
+	
+	Atom Fullscreen = XInternAtom(PlatformState->XDisplay, "_NET_WM_STATE_FULLSCREEN", False);
+	Atom WindowState = XInternAtom(PlatformState->XDisplay, "_NET_WM_STATE", False);
+	s32 Mask = SubstructureNotifyMask | SubstructureRedirectMask;
+
+	XEvent Event = {};
+	Event.xclient.type = ClientMessage;
+	Event.xclient.send_event = True;
+	Event.xclient.window = Wnd;
+	Event.xclient.message_type = WindowState;
+	Event.xclient.format = 32;
+	Event.xclient.data.l[0] = IsFullscreen ? _NET_WM_STATE_ADD : _NET_WM_STATE_REMOVE;
+	Event.xclient.data.l[1] = (long)Fullscreen;
+	Event.xclient.data.l[2] = 0;
+
+	XSendEvent(PlatformState->XDisplay,
+			   PlatformState->XRootWindow,
+			   False,
+			   Mask,
+			   &Event);
+}
+
+static Cursor
+LinuxCreateNullCursor(Display *XDisplay, Window RootWindow)
+{
+	Assert(XDisplay);
+	Assert(RootWindow);
+	
+	Pixmap CursorMask;
+	XGCValues XGC;
+	GC CursorGC;
+	XColor DummyColor;
+	Cursor Result;
+
+	CursorMask = XCreatePixmap(XDisplay,
+							   RootWindow,
+							   1, 1, 1);
+	XGC.function = GXclear;
+	CursorGC = XCreateGC(XDisplay,
+						 CursorMask,
+						 GCFunction,
+						 &XGC);
+	XFillRectangle(XDisplay,
+				   CursorMask,
+				   CursorGC,
+				   0, 0, 1, 1);
+
+	DummyColor.pixel = 0;
+	DummyColor.red = 0;
+	DummyColor.flags = 0;
+	Result = XCreatePixmapCursor(XDisplay,
+								 CursorMask, CursorMask,
+								 &DummyColor, &DummyColor,
+								 0, 0);
+	XFreePixmap(XDisplay, CursorMask);
+	XFreeGC(XDisplay, CursorGC);
+
+	return Result;
+}
+
 int
 main(int NumParams, char **Params)
 {
@@ -452,6 +654,10 @@ main(int NumParams, char **Params)
 	PlatformState.NumParams = NumParams;
 	PlatformState.Params = Params;
 
+#if INTERNAL
+	PlatformState.DebugCursor = true;
+#endif	
+	
 	// NOTE(ivan): Check if already running.
 	// TODO(ivan): Implement the check!
 
@@ -553,13 +759,20 @@ main(int NumParams, char **Params)
 						 &ShmPixmaps))
 		LinuxLog(&PlatformState, "X11 MIT-SHM extension version %d.%d.", ShmMajor, ShmMinor);
 	else
-		LinuxError(&PlatformState, "X11 MIT-SHM extension missing!");
+		LinuxError(&PlatformState, "X11 MIT-SHM extension is unavailable!");
+
+	// NOTE(ivan): Check X11 XKB support.
+	s32 XkbMajor = XkbMajorVersion, XkbMinor = XkbMinorVersion;
+	if (XkbLibraryVersion(&XkbMajor, &XkbMinor) == True)
+		LinuxLog(&PlatformState, "X11 XKB extension version: compile-time %d.%d, run-time %d.%d.", XkbMajorVersion, XkbMinorVersion, XkbMajor, XkbMinor);
+	else
+		LinuxError(&PlatformState, "X11 XKB extension is unavailable!");
 
 	// NOTE(ivan): Create main window and its GC.
 	XSetWindowAttributes WindowAttr;
 	WindowAttr.background_pixel = PlatformState.XBlack;
 	WindowAttr.border_pixel = PlatformState.XBlack;
-	WindowAttr.event_mask = StructureNotifyMask;
+	WindowAttr.event_mask = StructureNotifyMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask;
 
 	PlatformState.MainWindow = XCreateWindow(PlatformState.XDisplay,
 											 PlatformState.XRootWindow,
@@ -663,9 +876,32 @@ main(int NumParams, char **Params)
 												 WindowDim.Height);
 					}
 				} break;
+
+				case KeyPress:
+				case KeyRelease: {
+					KeySym XKeySym = XLookupKeysym(&Event.xkey, 0);
+					
+					key_code KeyCode;
+					if (LinuxMapXKeySymToKeyCode(XKeySym, &KeyCode))
+						LinuxProcessKeyboardOrMouseButton(&Input.KeyboardButtons[KeyCode], Event.type == KeyPress);
+				} break;
+
+				case ButtonPress:
+				case ButtonRelease: {
+				} break;
 				}
 			}
 		}
+
+		// NOTE(ivan): Process linux-side input events.
+		if (Input.KeyboardButtons[KeyCode_LeftAlt].IsDown && Input.KeyboardButtons[KeyCode_F4].IsDown)
+			PlatformState.Running = false;
+#if INTERNAL
+		if (IsSinglePress(Input.KeyboardButtons[KeyCode_F2]))
+			PlatformState.DebugCursor = !PlatformState.DebugCursor;
+#endif
+		if (Input.KeyboardButtons[KeyCode_LeftAlt].IsDown && IsSinglePress(Input.KeyboardButtons[KeyCode_Enter]))
+			LinuxToggleFullscreen(&PlatformState, PlatformState.MainWindow);
 
 		// NOTE(ivan): Prepare offscreen graphics buffer.
 		game_surface_buffer SurfaceBuffer;
@@ -689,6 +925,16 @@ main(int NumParams, char **Params)
 								  PlatformState.MainWindow,
 								  PlatformState.MainWindowGC);
 
+		// NOTE(ivan): Set cursor.
+		if (PlatformState.DebugCursor)
+			XUndefineCursor(PlatformState.XDisplay,
+							PlatformState.MainWindow);
+		else
+			XDefineCursor(PlatformState.XDisplay,
+						  PlatformState.MainWindow,
+						  LinuxCreateNullCursor(PlatformState.XDisplay,
+												PlatformState.MainWindow));
+		
 		// NOTE(ivan): Make keyboard input data obsolete for next frame.
 		for (u32 ButtonIndex = 0; ButtonIndex < CountOf(Input.KeyboardButtons); ButtonIndex++)
 			Input.KeyboardButtons[ButtonIndex].IsActual = false;
