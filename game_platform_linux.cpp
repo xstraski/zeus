@@ -333,7 +333,7 @@ PLATFORM_RELOAD_ENTITIES_MODULE(LinuxReloadEntitiesModule)
 	if (!LinuxCopyFile(FileName, TempFileName))
 		LinuxError(PlatformState, "Failed copying entities module!");
 	
-	PlatformState->EntitiesLibrary = dlopen(TempFileName, RTLD_NOW);
+	PlatformState->EntitiesLibrary = dlopen(TempFileName, RTLD_NOW | RTLD_LOCAL);
 	if (!PlatformState->EntitiesLibrary)
 		LinuxError(PlatformState, "Failed loading entities module!");
 
@@ -577,6 +577,7 @@ LinuxDisplaySurfaceBuffer(platform_state *PlatformState,
 				 False);
 }
 
+// TODO(ivan): This is temporary, we should support all possible video modes.
 static void
 LinuxToggleFullscreen(platform_state *PlatformState, Window Wnd)
 {
@@ -888,10 +889,46 @@ main(int NumParams, char **Params)
 
 				case ButtonPress:
 				case ButtonRelease: {
+					b32 IsKeyPress = (Event.type == ButtonPress);
+					switch (Event.xbutton.button) {
+					case Button1: {
+						LinuxProcessKeyboardOrMouseButton(&Input.MouseButtons[0], IsKeyPress);
+					} break;
+
+					case Button2: {
+						LinuxProcessKeyboardOrMouseButton(&Input.MouseButtons[1], IsKeyPress);
+					} break;
+
+					case Button3: {
+						LinuxProcessKeyboardOrMouseButton(&Input.MouseButtons[2], IsKeyPress);
+					} break;
+
+					case Button4: {
+						LinuxProcessKeyboardOrMouseButton(&Input.MouseButtons[3], IsKeyPress);
+					} break;
+
+					case Button5: {
+						LinuxProcessKeyboardOrMouseButton(&Input.MouseButtons[4], IsKeyPress);
+					} break;
+					}
 				} break;
 				}
 			}
 		}
+
+		// NOTE(ivan): Capture mouse pointer position.
+		Window RootIgnore, ChildIgnore;
+		s32 RootXIgnore, RootYIgnore;
+		s32 WinX, WinY;
+		u32 MaskIgnore;
+		XQueryPointer(PlatformState.XDisplay,
+					  PlatformState.MainWindow,
+					  &RootIgnore, &ChildIgnore,
+					  &RootXIgnore, &RootYIgnore,
+					  &WinX, &WinY,
+					  &MaskIgnore);
+		Input.MouseX = WinX;
+		Input.MouseY = WinY;
 
 		// NOTE(ivan): Process linux-side input events.
 		if (Input.KeyboardButtons[KeyCode_LeftAlt].IsDown && Input.KeyboardButtons[KeyCode_F4].IsDown)
