@@ -15,6 +15,29 @@
 #define _NET_WM_STATE_ADD 1
 #define _NET_WM_STATE_TOGGLE 2
 
+// NOTE(ivan): Joysticks definitions.
+#define XBOX_CONTROLLER_DEADZONE 5000
+
+#define XBOX_CONTROLLER_AXIS_LEFT_THUMB_X 0
+#define XBOX_CONTROLLER_AXIS_LEFT_THUMB_Y 1
+#define XBOX_CONTROLLER_AXIS_RIGHT_THUMB_X 2
+#define XBOX_CONTROLLER_AXIS_RIGHT_THUMB_Y 3
+#define XBOX_CONTROLLER_AXIS_RIGHT_TRIGGER 4
+#define XBOX_CONTROLLER_AXIS_LEFT_TRIGGER 5
+#define XBOX_CONTROLLER_AXIS_DPAD_HORZ 6
+#define XBOX_CONTROLLER_AXIS_DPAD_VERT 7
+
+#define XBOX_CONTROLLER_BUTTON_A 0
+#define XBOX_CONTROLLER_BUTTON_B 1
+#define XBOX_CONTROLLER_BUTTON_X 2
+#define XBOX_CONTROLLER_BUTTON_Y 3
+#define XBOX_CONTROLLER_BUTTON_LEFT_SHOULDER 4
+#define XBOX_CONTROLLER_BUTTON_RIGHT_SHOULDER 5
+#define XBOX_CONTROLLER_BUTTON_BACK 6
+#define XBOX_CONTROLLER_BUTTON_START 7
+#define XBOX_CONTROLLER_BUTTON_LEFT_THUMB 9
+#define XBOX_CONTROLLER_BUTTON_RIGHT_THUMB 10
+
 PLATFORM_CHECK_PARAM(LinuxCheckParam)
 {
 	Assert(PlatformState);
@@ -280,6 +303,19 @@ PLATFORM_WRITE_ENTIRE_FILE(LinuxWriteEntireFile)
 }
 
 static b32
+LinuxDirectoryExists(const char *DirName)
+{
+	Assert(DirName);
+
+	DIR *Dir = opendir(DirName);
+	if (!Dir)
+		return false;
+
+	closedir(Dir);
+	return true;
+}
+
+static b32
 LinuxCopyFile(const char *FileName, const char *NewName)
 {
 	Assert(FileName);
@@ -364,6 +400,82 @@ PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(LinuxShouldEntitiesModuleBeReloaded)
 	return false;
 }
 
+static void
+LinuxFindJoysticks(platform_state *PlatformState)
+{
+	Assert(PlatformState);
+
+	char JoyFileName[] = "/dev/input/jsX";
+
+	char Buffer[1024] = {};
+
+	if (PlatformState->JoyEffect.id != -1) {
+		PlatformState->JoyEffect.type = FF_RUMBLE;
+		PlatformState->JoyEffect.u.rumble.strong_magnitude = 60000;
+		PlatformState->JoyEffect.u.rumble.weak_magnitude = 0;
+		PlatformState->JoyEffect.replay.length = 200;
+		PlatformState->JoyEffect.replay.delay = 0;
+		PlatformState->JoyEffect.id = -1; // NOTE(ivan): ID must be set -1 for every new effect.
+	}
+
+	for (u8 Index = 0; Index < CountOf(PlatformState->JoystickIDs); Index++) {
+		u8 JoystickID = PlatformState->JoystickIDs[PlatformState->NumJoysticks];
+		if (PlatformState->JoystickFDs[JoystickID] && PlatformState->JoystickEDs[JoystickID]) {
+			PlatformState->NumJoysticks++;
+			continue;
+		} else if (!PlatformState->JoystickFDs[JoystickID]) {
+			JoyFileName[13] = (char)(Index + 0x30);
+			int JoyFile = open(JoyFileName, O_RDONLY | O_NONBLOCK);
+			if (JoyFile == -1)
+				continue;
+
+			PlatformState->JoystickFDs[JoystickID] = JoyFile;
+		}
+
+		if (!PlatformState->JoystickEDs[JoystickID]) {
+			// NOTE(ivan): Match the joystick file IDs with the event IDs.
+			for (u8 TempIndex = 0; TempIndex <= 99; TempIndex++) {
+				snprintf(Buffer, CountOf(Buffer) - 1, "/sys/class/input/js%d/device/event%d", Index, TempIndex);
+				if (LinuxDirectoryExists(Buffer)) {
+					snprintf(Buffer, CountOf(Buffer) - 1, "/dev/input/event%d", TempIndex);
+					int EventFile = open(Buffer, O_RDWR);
+					if (EventFile != -1) {
+						PlatformState->JoystickEDs[Index] = EventFile;
+
+						// NOTE(ivan): Send the effect to the driver.
+						if (ioctl(EventFile, EVIOCSFF, &PlatformState->JoyEffect) == -1) {
+							// TODO(ivan): Error.
+						}
+
+						break;
+					}
+				}
+			}
+
+			PlatformState->JoystickIDs[PlatformState->NumJoysticks++] = Index;
+		} else {
+			PlatformState->NumJoysticks++;
+		}
+	}
+}
+
+static void
+LinuxReleaseJoysticks(platform_state *PlatformState)
+{
+	Assert(PlatformState);
+
+	// TODO(ivan): Remove unplugged joysticks?
+	for (u8 Index = 0; Index < MAX_JOYSTICKS; Index++) {
+		if (PlatformState->JoystickIDs[Index]) {
+			if (PlatformState->JoystickEDs[PlatformState->JoystickIDs[Index]] > 0)
+				close(PlatformState->JoystickEDs[PlatformState->JoystickIDs[Index]]);
+
+			if (PlatformState->JoystickFDs[PlatformState->JoystickIDs[Index]] > 0)
+				close(PlatformState->JoystickFDs[PlatformState->JoystickIDs[Index]]);
+		}
+	}
+}
+
 inline void
 LinuxProcessKeyboardOrMouseButton(game_input_button *Button,
 								  b32 IsDown)
@@ -371,12 +483,40 @@ LinuxProcessKeyboardOrMouseButton(game_input_button *Button,
 	Assert(Button);
 
 	if (Button->WasDown != IsDown)
-		Button->HalfTransitionCount = 1;
-	else
-		Button->HalfTransitionCount = 0;	
+		Button->HalfTransitionCount++;
 	Button->WasDown = Button->IsDown;
 	Button->IsDown = IsDown;
 	Button->IsActual = true;
+}
+
+inline void
+LinuxProcessXboxDigitalButton(u32 ButtonState,
+							  game_input_button *Button)
+{
+	Assert(Button);
+
+	b32 IsDown = (ButtonState != 0);
+	if (Button->WasDown != IsDown)
+		Button->HalfTransitionCount = 1;
+	else
+		Button->HalfTransitionCount = 0;
+	Button->WasDown = Button->IsDown;
+	Button->IsDown = IsDown;
+	Button->IsActual = true;
+}
+
+inline f32
+LinuxProcessXboxAnalogStick(s16 Value,
+							u16 DeadZoneThreshold)
+{
+	f32 Result = 0.0f;
+
+	if (Value < -DeadZoneThreshold)
+		Result = (f32)((Value + DeadZoneThreshold) / (32768.0f - DeadZoneThreshold));
+	else if (Value > DeadZoneThreshold)
+		Result = (f32)((Value - DeadZoneThreshold) / (32767.0f - DeadZoneThreshold));
+
+	return Result;
 }
 
 static b32
@@ -732,6 +872,9 @@ main(int NumParams, char **Params)
 	// NOTE(ivan): Initialize input structure for future use.
 	game_input Input = {};
 
+	// NOTE(ivan): Initialize joysticks.
+	LinuxFindJoysticks(&PlatformState);
+
 	// NOTE(ivan): Connect to X server.
 	PlatformState.XDisplay = XOpenDisplay(getenv("DISPLAY"));
 	if (!PlatformState.XDisplay) {
@@ -930,6 +1073,92 @@ main(int NumParams, char **Params)
 		Input.MouseX = WinX;
 		Input.MouseY = WinY;
 
+		// NOTE(ivan): Process joysticks input.
+		if (PlatformState.NumJoysticks) {
+			u8 NumJoysticks = PlatformState.NumJoysticks;
+			if (NumJoysticks > CountOf(Input.Controllers))
+				NumJoysticks = CountOf(Input.Controllers);
+			
+			for (u8 Index = 0; Index < NumJoysticks; Index++) {
+				u8 JoystickID = PlatformState.JoystickIDs[Index];
+				game_input_controller *Joystick = &Input.Controllers[Index];
+
+				Joystick->IsConnected = true;
+
+				struct js_event JoyEvent;
+				while (read(PlatformState.JoystickFDs[Index], &JoyEvent, sizeof(JoyEvent)) > 0) {
+					if (JoyEvent.type >= JS_EVENT_INIT)
+						JoyEvent.type -= JS_EVENT_INIT;
+
+					if (JoyEvent.type == JS_EVENT_BUTTON) {
+						if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_A) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->A);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_B) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->B);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_X) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->X);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_Y) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->Y);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_START) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->Start);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_BACK) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->Back);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_LEFT_SHOULDER) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->LeftBumper);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_RIGHT_SHOULDER) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->RightBumper);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_LEFT_THUMB) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->LeftStick);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_BUTTON_RIGHT_THUMB) {
+							LinuxProcessXboxDigitalButton((u32)JoyEvent.value,
+														  &Joystick->RightStick);
+						}
+					} else if (JoyEvent.type == JS_EVENT_AXIS) {
+						if (JoyEvent.number == XBOX_CONTROLLER_AXIS_LEFT_THUMB_X) {
+							Joystick->LeftStickX = LinuxProcessXboxAnalogStick(JoyEvent.value, XBOX_CONTROLLER_DEADZONE);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_AXIS_LEFT_THUMB_Y) {
+							Joystick->LeftStickY = LinuxProcessXboxAnalogStick(JoyEvent.value, XBOX_CONTROLLER_DEADZONE);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_AXIS_RIGHT_THUMB_X) {
+							Joystick->RightStickX = LinuxProcessXboxAnalogStick(JoyEvent.value, XBOX_CONTROLLER_DEADZONE);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_AXIS_RIGHT_THUMB_Y) {
+							Joystick->RightStickY = LinuxProcessXboxAnalogStick(JoyEvent.value, XBOX_CONTROLLER_DEADZONE);
+						} else if (JoyEvent.number == XBOX_CONTROLLER_AXIS_DPAD_HORZ) {
+							if (JoyEvent.value = -32767) {
+								LinuxProcessXboxDigitalButton(1, &Joystick->Left);
+								LinuxProcessXboxDigitalButton(0, &Joystick->Right);
+							} else if (JoyEvent.value == 32768) {
+								LinuxProcessXboxDigitalButton(0, &Joystick->Left);
+								LinuxProcessXboxDigitalButton(1, &Joystick->Right);
+							} else {
+								LinuxProcessXboxDigitalButton(0, &Joystick->Left);
+								LinuxProcessXboxDigitalButton(0, &Joystick->Right);
+							}
+						} else if (JoyEvent.number == XBOX_CONTROLLER_AXIS_DPAD_VERT) {
+							if (JoyEvent.value = -32767) {
+								LinuxProcessXboxDigitalButton(1, &Joystick->Up);
+								LinuxProcessXboxDigitalButton(0, &Joystick->Down);
+							} else if (JoyEvent.value == 32768) {
+								LinuxProcessXboxDigitalButton(0, &Joystick->Up);
+								LinuxProcessXboxDigitalButton(1, &Joystick->Down);
+							} else {
+								LinuxProcessXboxDigitalButton(0, &Joystick->Up);
+								LinuxProcessXboxDigitalButton(0, &Joystick->Down);
+							}
+						}
+					}
+				}
+			}
+		}
+
 		// NOTE(ivan): Process linux-side input events.
 		if (Input.KeyboardButtons[KeyCode_LeftAlt].IsDown && Input.KeyboardButtons[KeyCode_F4].IsDown)
 			PlatformState.Running = false;
@@ -1022,6 +1251,9 @@ main(int NumParams, char **Params)
 
 	// NOTE(ivan): Disconnect from X server.
 	XCloseDisplay(PlatformState.XDisplay);
+
+	// NOTE(ivan): Destroy joysticks.
+	LinuxReleaseJoysticks(&PlatformState);
 
 	// NOTE(ivan): Release work queues.
 	LinuxReleaseWorkQueue(&PlatformState.HighPriorityWorkQueue);

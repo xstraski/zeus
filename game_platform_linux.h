@@ -14,19 +14,25 @@
 #include <dirent.h>
 #include <dlfcn.h>
 
-// POSIX threads includes.
+// NOTE(ivan): POSIX threads includes.
 #include <pthread.h>
 #include <semaphore.h>
 
-// X11 includes.
+// NOTE(ivan): X11 includes.
 #include <X11/Xlib.h>
 #include <X11/Xos.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 
-// X11 extensions includes.
+// NOTE(ivan): X11 extensions includes.
 #include <X11/XKBlib.h>
 #include <X11/extensions/XShm.h>
+
+// NOTE(ivan): Kernel includes.
+#include <linux/joystick.h>
+
+// NOTE(ivan): Maximal number of joysticks.
+#define MAX_JOYSTICKS 8
 
 // NOTE(ivan): Work queue entry structure.
 struct work_queue_entry {
@@ -127,6 +133,13 @@ struct platform_state {
 
 	work_queue HighPriorityWorkQueue;
 	work_queue LowPriorityWorkQueue;
+
+	// NOTE(ivan): Joysticks.
+	u32 NumJoysticks;
+	u8 JoystickIDs[MAX_JOYSTICKS];
+	int JoystickFDs[MAX_JOYSTICKS];
+	int JoystickEDs[MAX_JOYSTICKS];
+	struct ff_effect JoyEffect;
 
 	// NOTE(ivan): X server stuff.
 	Display *XDisplay;
