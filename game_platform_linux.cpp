@@ -15,7 +15,7 @@
 #define _NET_WM_STATE_ADD 1
 #define _NET_WM_STATE_TOGGLE 2
 
-// NOTE(ivan): Joysticks definitions.
+// NOTE(ivan): XBOX controller definitions.
 #define XBOX_CONTROLLER_DEADZONE 5000
 
 #define XBOX_CONTROLLER_AXIS_LEFT_THUMB_X 0
@@ -357,15 +357,18 @@ LinuxCopyFile(const char *FileName, const char *NewName)
 PLATFORM_RELOAD_ENTITIES_MODULE(LinuxReloadEntitiesModule)
 {
 	Assert(PlatformState);
-	Assert(FileName);
+	Assert(FileNameNoExt);
 	Assert(TempFileName);
+	Assert(GameState);
 	Assert(GameAPI);
 
 	if (PlatformState->EntitiesLibrary) {
 		dlclose(PlatformState->EntitiesLibrary);
 		PlatformState->EntitiesLibrary = 0;
 	}
-	
+
+	char FileName[2048] = {};
+	snprintf(FileName, CountOf(FileName) - 1, "%s.so", FileNameNoExt);
 	if (!LinuxCopyFile(FileName, TempFileName))
 		LinuxError(PlatformState, "Failed copying entities module!");
 	
@@ -382,7 +385,7 @@ PLATFORM_RELOAD_ENTITIES_MODULE(LinuxReloadEntitiesModule)
 	if (!RegisterAllEntities)
 		LinuxError(PlatformState, "Failed verifying entities module!");
 	
-	RegisterAllEntities(GameAPI);
+	RegisterAllEntities(GameState, GameAPI);
 }
 
 PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(LinuxShouldEntitiesModuleBeReloaded)

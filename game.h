@@ -114,6 +114,32 @@ enum game_state_type {
 	GameStateType_Frame
 };
 
+// NOTE(ivan): Game entity update function.
+#define UPDATE_GAME_ENTITY(name) void name(struct game_api *GameAPI, game_state_type UpdateType, void *State)
+typedef UPDATE_GAME_ENTITY(update_game_entity);
+
+// NOTE(ivan): Game entity.
+struct game_entity {
+	u32 Id;
+	char *Name;
+
+	void *State;
+	update_game_entity *Update;
+
+	game_entity *Next;
+	game_entity *Prev;
+};
+
+// NOTE(ivan): Game entity registration information.
+struct game_entity_reg {
+	char Name[256];
+
+	u32 StateBytes;
+	update_game_entity *Update;
+
+	game_entity_reg *Next;
+};
+
 // NOTE(ivan): Game state.
 // NOTE(ivan): Game state structure allocated in platform layer MUST be ZEROED.
 struct game_state {
@@ -121,6 +147,12 @@ struct game_state {
 	game_config Config;
 
 	memory_stack FrameStack;
+
+	// NOTE(ivan): Entity system.
+	memory_pool EntitiesPool;
+	memory_pool EntityRegsPool;
+	game_entity *Entities;
+	game_entity_reg *EntityRegs;
 };
 
 // NOTE(ivan): This is program's main body, gets called each frame.
@@ -144,25 +176,31 @@ typedef FREE_CONFIGURATION(free_configuration);
 #define GET_CONFIGURATION_VALUE(name) const char * name (game_config *Config, const char *Name, const char *Default)
 typedef GET_CONFIGURATION_VALUE(get_configuration_value);
 
+#define REGISTER_ENTITY(name) void name(game_state *GameState, game_api *GameAPI, const char *Name, u32 StateBytes, update_game_entity *Update)
+typedef REGISTER_ENTITY(register_entity);
+
 // NOTE(ivan): Game API exported to entities module.
 struct game_api {
 	platform_state *PlatformState;
 	platform_api *PlatformAPI;
 
-	game_state *GameState;
-
 	load_configuration *LoadConfiguration;
 	save_configuration *SaveConfiguration;
 	free_configuration *FreeConfiguration;
 	get_configuration_value *GetConfigurationValue;
+	register_entity *RegisterEntity;
 
 	push_draw_group_rectangle *PushDrawGroupRectangle;
 	push_draw_group_image *PushDrawGroupImage;
+
+	s32 SurfaceWidth;
+	s32 SurfaceHeight;
 };
 
 LOAD_CONFIGURATION(LoadConfiguration);
 SAVE_CONFIGURATION(SaveConfiguration);
 FREE_CONFIGURATION(FreeConfiguration);
 GET_CONFIGURATION_VALUE(GetConfigurationValue);
+REGISTER_ENTITY(RegisterEntity);
 
 #endif // #ifndef GAME_H

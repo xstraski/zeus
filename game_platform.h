@@ -233,7 +233,7 @@ typedef PLATFORM_FREE_ENTIRE_FILE_MEMORY(platform_free_entire_file_memory);
 #define PLATFORM_WRITE_ENTIRE_FILE(name) b32 name(const char *FileName, void *Memory, u32 Bytes)
 typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 
-#define PLATFORM_RELOAD_ENTITIES_MODULE(name) void name(platform_state *PlatformState, const char *FileName, const char *TempFileName, const char *LockFileName, struct game_api *GameAPI)
+#define PLATFORM_RELOAD_ENTITIES_MODULE(name) void name(platform_state *PlatformState, const char *FileNameNoExt, const char *TempFileName, const char *LockFileName, struct game_state *GameState, struct game_api *GameAPI)
 typedef PLATFORM_RELOAD_ENTITIES_MODULE(platform_reload_entities_module);
 
 #define PLATFORM_SHOULD_ENTITIES_MODULE_BE_RELOADED(name) b32 name(platform_state *PlatformState, const char *FileName)

@@ -171,6 +171,33 @@ GET_CONFIGURATION_VALUE(GetConfigurationValue)
 	return Default;
 }
 
+REGISTER_ENTITY(RegisterEntity)
+{
+	Assert(GameState);
+	Assert(GameAPI);
+	Assert(Name);
+	Assert(Update);
+	
+	// NOTE(ivan): Check if already registered.
+	for (game_entity_reg *EntityReg = GameState->EntityRegs; EntityReg; EntityReg = EntityReg->Next) {
+		if (strcmp(EntityReg->Name, Name) == 0)
+			return;
+	}
+
+	// NOTE(ivan): Register new entity reg.
+	GameAPI->PlatformAPI->Log(GameAPI->PlatformState, "Registering entity \"%s\"...", Name);
+	
+	game_entity_reg *NewEntityReg = PushPoolType(GameAPI->PlatformState,
+												 GameAPI->PlatformAPI,
+												 &GameState->EntityRegsPool,
+												 game_entity_reg);
+	strncpy(NewEntityReg->Name, Name, CountOf(NewEntityReg->Name) - 1);
+	NewEntityReg->StateBytes = StateBytes;
+	NewEntityReg->Update = Update;
+	NewEntityReg->Next = GameState->EntityRegs;
+	GameState->EntityRegs = NewEntityReg;
+}
+
 void
 UpdateGame(platform_state *PlatformState,
 		   platform_api *PlatformAPI,
@@ -185,11 +212,9 @@ UpdateGame(platform_state *PlatformState,
 
 	static game_api GameAPI = {};
 
-	static char EntitiesFileName[1024] = {};
-	static char EntitiesTempFileName[1024] = {};
-	static char EntitiesLockFileName[1024] = {};
-
-	static image TestImage = {};
+	static char EntitiesModuleFileName[1024] = {};
+	static char EntitiesModuleTempFileName[1024] = {};
+	static char EntitiesModuleLockFileName[1024] = {};
 	
 	switch (State->Type) {
 		///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -199,13 +224,16 @@ UpdateGame(platform_state *PlatformState,
 		// NOTE(ivan): Prepare game interface.
 		GameAPI.PlatformState = PlatformState;
 		GameAPI.PlatformAPI = PlatformAPI;
-		GameAPI.GameState = State;
 		GameAPI.LoadConfiguration = LoadConfiguration;
 		GameAPI.SaveConfiguration = SaveConfiguration;
 		GameAPI.FreeConfiguration = FreeConfiguration;
 		GameAPI.GetConfigurationValue = GetConfigurationValue;
 		GameAPI.PushDrawGroupRectangle = PushDrawGroupRectangle;
 		GameAPI.PushDrawGroupImage = PushDrawGroupImage;
+		GameAPI.RegisterEntity = RegisterEntity;
+
+		GameAPI.SurfaceWidth = SurfaceBuffer->Width;
+		GameAPI.SurfaceHeight = SurfaceBuffer->Height;
 
 		// NOTE(ivan): Initialize per-frame stack.
 		InitializeMemoryStack(PlatformState,
@@ -213,31 +241,57 @@ UpdateGame(platform_state *PlatformState,
 							  &State->FrameStack,
 							  "FrameStack",
 							  0, 1024);
+
+		// NOTE(ivan): Initialize entity system.
+		InitializeMemoryPool(PlatformState,
+							 PlatformAPI,
+							 &State->EntitiesPool,
+							 "EntitiesPool",
+							 sizeof(game_entity),
+							 1024);
+		InitializeMemoryPool(PlatformState,
+							 PlatformAPI,
+							 &State->EntityRegsPool,
+							 "EntityRegsPool",
+							 sizeof(game_entity_reg),
+							 256);
 		
 		// NOTE(ivan): Load configuration.
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "default.cfg", 0);
 		State->Config = LoadConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 
 		// NOTE(ivan): Load entities.
-		snprintf(EntitiesFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents" DLL_EXTENSION, PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
-		snprintf(EntitiesTempFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.tmp", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
-		snprintf(EntitiesLockFileName, CountOf(EntitiesFileName) - 1, "%s%s_ents.lck", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
-		PlatformAPI->ReloadEntitiesModule(PlatformState, EntitiesFileName, EntitiesTempFileName, EntitiesLockFileName, &GameAPI);
-
-		TestImage = LoadBMP(PlatformState,
-							PlatformAPI,
-							"data/hhtest.bmp");
+		snprintf(EntitiesModuleFileName, CountOf(EntitiesModuleFileName) - 1, "%s%s_ents", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
+		snprintf(EntitiesModuleTempFileName, CountOf(EntitiesModuleFileName) - 1, "%s%s_ents.tmp", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
+		snprintf(EntitiesModuleLockFileName, CountOf(EntitiesModuleFileName) - 1, "%s%s_ents.lck", PlatformAPI->ExePath, PlatformAPI->ExeNameNoExt);
+		PlatformAPI->ReloadEntitiesModule(PlatformState,
+										  EntitiesModuleFileName,
+										  EntitiesModuleTempFileName,
+										  EntitiesModuleLockFileName,
+										  State, &GameAPI);
 	} break;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 		// NOTE(ivan): Game frame.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Frame: {
+		// NOTE(ivan): Update surface information.
+		GameAPI.SurfaceWidth = SurfaceBuffer->Width;
+		GameAPI.SurfaceHeight = SurfaceBuffer->Height;
+		
 #if INTERNAL
 		// NOTE(ivan): Reload entities if necessary.
-		if (PlatformAPI->ShouldEntitiesModuleBeReloaded(PlatformState, EntitiesFileName))
-			PlatformAPI->ReloadEntitiesModule(PlatformState, EntitiesFileName, EntitiesTempFileName, EntitiesLockFileName, &GameAPI);
+		if (PlatformAPI->ShouldEntitiesModuleBeReloaded(PlatformState, EntitiesModuleFileName))
+			PlatformAPI->ReloadEntitiesModule(PlatformState,
+											  EntitiesModuleFileName,
+											  EntitiesModuleTempFileName,
+											  EntitiesModuleLockFileName,
+											  State, &GameAPI);
 #endif
+
+		// NOTE(ivan): Update all game entities.
+		for (game_entity *Entity = State->Entities; Entity; Entity = Entity->Next)
+			Entity->Update(&GameAPI, GameStateType_Frame, Entity->State);
 
 		// NOTE(ivan): Prepare draw group.
 		draw_group *PrimaryDrawGroup = PushStackType(PlatformState,
@@ -258,8 +312,6 @@ UpdateGame(platform_state *PlatformState,
 					  MakeV2(0.0f, 0.0f),
 					  MakeV2((f32)(SurfaceBuffer->Width - 1), (f32)(SurfaceBuffer->Height - 1)),
 					  MakeRGBA(0.0f, 0.0f, 0.0f, 1.0f));
-
-		PushDrawGroupImage(PrimaryDrawGroup, MakeV2(20.0f, 20.0f), &TestImage);
 		
 		// NOTE(ivan): Present draw group to the surface buffer.
 		DrawGroup(PrimaryDrawGroup, SurfaceBuffer);
@@ -273,11 +325,15 @@ UpdateGame(platform_state *PlatformState,
 		// NOTE(ivan): Game release.
 		///////////////////////////////////////////////////////////////////////////////////////////////////
 	case GameStateType_Release: {
-		FreeImage(PlatformAPI, &TestImage);
-		
 		// NOTE(ivan): Save configuration.
 		SaveConfiguration(PlatformState, PlatformAPI, "user.cfg", &State->Config);
 		FreeConfiguration(PlatformAPI, &State->Config);
+
+		// NOTE(ivan): Release entities system.
+		FreeMemoryPool(PlatformAPI,
+					   &State->EntitiesPool);
+		FreeMemoryPool(PlatformAPI,
+					   &State->EntityRegsPool);
 	} break;
 	}
 }

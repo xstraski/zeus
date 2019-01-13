@@ -342,9 +342,10 @@ Win32GetLastWriteTime(const char *FileName)
 PLATFORM_RELOAD_ENTITIES_MODULE(Win32ReloadEntitiesModule)
 {
 	Assert(PlatformState);
-	Assert(FileName);
+	Assert(FileNameNoExt);
 	Assert(TempFileName);
 	Assert(LockFileName);
+	Assert(GameState);
 	Assert(GameAPI);
 
 	if (PlatformState->EntitiesLibrary) {
@@ -354,6 +355,9 @@ PLATFORM_RELOAD_ENTITIES_MODULE(Win32ReloadEntitiesModule)
 	
 	WIN32_FILE_ATTRIBUTE_DATA LockData;
 	if (!GetFileAttributesEx(LockFileName, GetFileExInfoStandard, &LockData)) {
+		char FileName[2048] = {};
+		snprintf(FileName, CountOf(FileName) - 1, "%s.so", FileNameNoExt);
+		
 		PlatformState->EntitiesLibraryLastWriteTime = Win32GetLastWriteTime(FileName);
 
 		CopyFileA(FileName, TempFileName, FALSE);
@@ -367,7 +371,7 @@ PLATFORM_RELOAD_ENTITIES_MODULE(Win32ReloadEntitiesModule)
 		if (!RegisterAllEntities)
 			Win32Error(PlatformState, "Failed verifying entities module!");
 
-		RegisterAllEntities(GameAPI);
+		RegisterAllEntities(GameState, GameAPI);
 	}
 }
 
